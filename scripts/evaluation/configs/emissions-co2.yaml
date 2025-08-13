@@ -1,0 +1,5 @@
+- name: emissions-co2
+  dataset_path: Dataset/Dataset.arrow/emissions-co2.arrow
+  offset: -5
+  prediction_length: 5
+  num_rolls: 1
