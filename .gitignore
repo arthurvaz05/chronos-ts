@@ -44,12 +44,10 @@ Thumbs.db
 
 # Project specific - EXCLUDE LARGE FILES
 output/
-results/
 *.log
 *.arrow
 *.csv
 *.png
-*.json
 *.safetensors
 *.bin
 *.h5
@@ -58,26 +56,26 @@ results/
 *.pt
 *.ckpt
 
-# Training outputs (very large)
+# Training outputs (very large) - exclude these specific directories
 results/*/training/run-*/checkpoint-*/
 results/*/training/run-*/logs/
 results/*/training/run-*/model.safetensors
 results/*/training/run-*/pytorch_model.bin
+results/*/training/run-*/checkpoint-final/
 
 # Dataset files (can be large)
 Dataset/Dataset.arrow/
 *.arrow
 
-# Keep only essential files for documentation
-!results/*/metrics.csv
-!results/*/README.md
+# Keep essential files (these override exclusions above)
 !*.md
 !*.py
 !*.yaml
 !*.yml
 !*.toml
 !*.txt
-!*.json.example
+!*.json
+!*.cff
 
 # Jupyter notebooks
 *.ipynb_checkpoints/
