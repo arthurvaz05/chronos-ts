@@ -427,13 +427,19 @@ def create_prediction_analysis_plot(dataset_name: str, column_folder: str, colum
         # Convert timestamp to datetime
         df['timestamp'] = pd.to_datetime(df['timestamp'])
         
-        # Separate actual and predicted data
+        # Separate actual and all four prediction types
         actual_data = df[df['type'] == 'actual'].copy()
-        predicted_data = df[df['type'] == 'predicted'].copy()
+        ft_sa_data = df[df['type'] == 'predicted FT SA'].copy()
+        zr_sa_data = df[df['type'] == 'predicted ZR SA'].copy()
+        ft_ro_data = df[df['type'] == 'predicted FT RO'].copy()
+        zr_ro_data = df[df['type'] == 'predicted ZR RO'].copy()
         
         # Sort by timestamp
         actual_data = actual_data.sort_values('timestamp')
-        predicted_data = predicted_data.sort_values('timestamp')
+        ft_sa_data = ft_sa_data.sort_values('timestamp')
+        zr_sa_data = zr_sa_data.sort_values('timestamp')
+        ft_ro_data = ft_ro_data.sort_values('timestamp')
+        zr_ro_data = zr_ro_data.sort_values('timestamp')
         
         # Create the plot - single chart only
         fig, ax = plt.subplots(1, 1, figsize=(15, 8))
@@ -457,11 +463,26 @@ def create_prediction_analysis_plot(dataset_name: str, column_folder: str, colum
                 year = 1990 + len(training_data) + i
                 comparison_years.append(year)
             
-            # Create year-based timestamps for predicted data
-            predicted_years = []
-            for i in range(len(predicted_data)):
+            # Create year-based timestamps for all prediction types
+            ft_sa_years = []
+            for i in range(len(ft_sa_data)):
                 year = 1990 + len(training_data) + i
-                predicted_years.append(year)
+                ft_sa_years.append(year)
+            
+            zr_sa_years = []
+            for i in range(len(zr_sa_data)):
+                year = 1990 + len(training_data) + i
+                zr_sa_years.append(year)
+            
+            ft_ro_years = []
+            for i in range(len(ft_ro_data)):
+                year = 1990 + len(training_data) + i
+                ft_ro_years.append(year)
+            
+            zr_ro_years = []
+            for i in range(len(zr_ro_data)):
+                year = 1990 + len(training_data) + i
+                zr_ro_years.append(year)
             
             # Plot training data (excluding last 5 values)
             ax.plot(training_years, training_data['value'], 
@@ -473,9 +494,25 @@ def create_prediction_analysis_plot(dataset_name: str, column_folder: str, colum
                     label='Actual Values (Comparison Period)', 
                     marker='s', linewidth=2, markersize=8, color='green')
             
-            # Plot predicted values
-            ax.plot(predicted_years, predicted_data['value'], 
-                    label='Predicted Values', marker='x', linewidth=2, markersize=8, color='red')
+            # Plot fine-tuned steps ahead predictions
+            if len(ft_sa_data) > 0:
+                ax.plot(ft_sa_years, ft_sa_data['value'], 
+                        label='Fine-tuned Steps Ahead (FT SA)', marker='x', linewidth=2, markersize=8, color='red')
+            
+            # Plot zero-shot steps ahead predictions
+            if len(zr_sa_data) > 0:
+                ax.plot(zr_sa_years, zr_sa_data['value'], 
+                        label='Zero-shot Steps Ahead (ZR SA)', marker='^', linewidth=2, markersize=8, color='orange')
+            
+            # Plot fine-tuned rolling origin predictions
+            if len(ft_ro_data) > 0:
+                ax.plot(ft_ro_years, ft_ro_data['value'], 
+                        label='Fine-tuned Rolling Origin (FT RO)', marker='s', linewidth=2, markersize=8, color='purple')
+            
+            # Plot zero-shot rolling origin predictions
+            if len(zr_ro_data) > 0:
+                ax.plot(zr_ro_years, zr_ro_data['value'], 
+                        label='Zero-shot Rolling Origin (ZR RO)', marker='d', linewidth=2, markersize=8, color='brown')
             
             # Add a vertical line to separate training from comparison/prediction
             if len(training_data) > 0:
@@ -484,7 +521,9 @@ def create_prediction_analysis_plot(dataset_name: str, column_folder: str, colum
                           label=f'Comparison Start ({last_training_year})')
             
             # Set title and labels
-            ax.set_title(f'{dataset_name.title()} - {column_name}: Training vs Actual vs Predicted (1990-{predicted_years[-1]})', 
+            all_years = [ft_sa_years, zr_sa_years, ft_ro_years, zr_ro_years]
+            max_year = max([years[-1] if years else 0 for years in all_years])
+            ax.set_title(f'{dataset_name.title()} - {column_name}: Training vs Actual vs All Prediction Methods (1990-{max_year})', 
                          fontsize=16, fontweight='bold')
             ax.set_xlabel('Year', fontsize=12)
             ax.set_ylabel('Climate Value', fontsize=12)
@@ -497,44 +536,76 @@ def create_prediction_analysis_plot(dataset_name: str, column_folder: str, colum
             ax.tick_params(axis='x', rotation=45)
             
             # Add text box with statistics
-            stats_text = f'Training: {len(training_data)} points\nActual (Comparison): {len(comparison_data)} points\nPredicted: {len(predicted_data)} points\nTime Range: 1990-{predicted_years[-1]}'
+            stats_text = f'Training: {len(training_data)} points\nActual (Comparison): {len(comparison_data)} points\nFT Steps Ahead: {len(ft_sa_data)} points\nZR Steps Ahead: {len(zr_sa_data)} points\nFT Rolling Origin: {len(ft_ro_data)} points\nZR Rolling Origin: {len(zr_ro_data)} points\nTime Range: 1990-{max_year}'
             ax.text(0.02, 0.98, stats_text, transform=ax.transAxes, fontsize=10,
                     verticalalignment='top', bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.8))
             
-            # Calculate and display comparison metrics
-            if len(comparison_data) == len(predicted_data):
-                # Extract values for calculations
+            # Calculate and display comparison metrics for all four prediction types
+            if len(comparison_data) > 0:
                 actual_values = comparison_data['value'].values
-                predicted_values = predicted_data['value'].values
                 
-                # Calculate RMSE
-                rmse = np.sqrt(((actual_values - predicted_values) ** 2).mean())
-                
-                # Calculate MAE (Mean Absolute Error)
-                mae = np.mean(np.abs(actual_values - predicted_values))
-                
-                # Calculate MAPE (Mean Absolute Percentage Error)
-                # Avoid division by zero
-                mape = np.mean(np.abs((actual_values - predicted_values) / np.where(actual_values != 0, actual_values, 1))) * 100
-                
-                # Calculate MASE (Mean Absolute Scaled Error)
-                # Use training data for baseline
-                if len(training_data) > 1:
-                    # Calculate naive forecast (previous value) for training data
-                    training_values = training_data['value'].values
-                    naive_forecast = training_values[:-1]
-                    actual_training = training_values[1:]
-                    mae_naive = np.mean(np.abs(actual_training - naive_forecast))
+                # Helper function to calculate metrics
+                def calculate_metrics(actual_vals, predicted_vals, training_vals):
+                    if len(actual_vals) != len(predicted_vals):
+                        return np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
                     
-                    if mae_naive > 0:
-                        mase = mae / mae_naive
-                    else:
-                        mase = np.nan
-                else:
+                    # RMSE
+                    rmse = np.sqrt(((actual_vals - predicted_vals) ** 2).mean())
+                    
+                    # MAE
+                    mae = np.mean(np.abs(actual_vals - predicted_vals))
+                    
+                    # MAPE
+                    mape = np.mean(np.abs((actual_vals - predicted_vals) / np.where(actual_vals != 0, actual_vals, 1))) * 100
+                    
+                    # MASE
                     mase = np.nan
+                    if len(training_vals) > 1:
+                        naive_forecast = training_vals[:-1]
+                        actual_training = training_vals[1:]
+                        mae_naive = np.mean(np.abs(actual_training - naive_forecast))
+                        if mae_naive > 0:
+                            mase = mae / mae_naive
+                    
+                    # SMAPE
+                    smape = np.mean(2 * np.abs(predicted_vals - actual_vals) / (np.abs(actual_vals) + np.abs(predicted_vals))) * 100
+                    
+                    # Correlation
+                    correlation = np.nan
+                    try:
+                        if len(actual_vals) > 1 and len(predicted_vals) > 1:
+                            actual_series = pd.Series(actual_vals)
+                            predicted_series = pd.Series(predicted_vals)
+                            correlation = actual_series.corr(predicted_series)
+                    except:
+                        pass
+                    
+                    return rmse, mae, mape, mase, smape, correlation
                 
-                # Calculate SMAPE (Symmetric Mean Absolute Percentage Error)
-                smape = np.mean(2 * np.abs(predicted_values - actual_values) / (np.abs(actual_values) + np.abs(predicted_values))) * 100
+                # Get training values for MASE calculation
+                training_values = training_data['value'].values if len(training_data) > 0 else np.array([])
+                
+                # Calculate metrics for all four prediction types
+                ft_sa_metrics = calculate_metrics(actual_values, ft_sa_data['value'].values, training_values) if len(ft_sa_data) > 0 else (np.nan,)*6
+                zr_sa_metrics = calculate_metrics(actual_values, zr_sa_data['value'].values, training_values) if len(zr_sa_data) > 0 else (np.nan,)*6
+                ft_ro_metrics = calculate_metrics(actual_values, ft_ro_data['value'].values, training_values) if len(ft_ro_data) > 0 else (np.nan,)*6
+                zr_ro_metrics = calculate_metrics(actual_values, zr_ro_data['value'].values, training_values) if len(zr_ro_data) > 0 else (np.nan,)*6
+                
+                # Save metrics to CSV table for better comparison
+                metrics_data = {
+                    'Method': ['FT Steps Ahead', 'ZR Steps Ahead', 'FT Rolling Origin', 'ZR Rolling Origin'],
+                    'RMSE': [ft_sa_metrics[0], zr_sa_metrics[0], ft_ro_metrics[0], zr_ro_metrics[0]],
+                    'MAE': [ft_sa_metrics[1], zr_sa_metrics[1], ft_ro_metrics[1], zr_ro_metrics[1]],
+                    'MAPE (%)': [ft_sa_metrics[2], zr_sa_metrics[2], ft_ro_metrics[2], zr_ro_metrics[2]],
+                    'MASE': [ft_sa_metrics[3], zr_sa_metrics[3], ft_ro_metrics[3], zr_ro_metrics[3]],
+                    'SMAPE (%)': [ft_sa_metrics[4], zr_sa_metrics[4], ft_ro_metrics[4], zr_ro_metrics[4]],
+                    'Correlation': [ft_sa_metrics[5], zr_sa_metrics[5], ft_ro_metrics[5], zr_ro_metrics[5]]
+                }
+                
+                metrics_df = pd.DataFrame(metrics_data)
+                metrics_csv_path = f"{column_folder}/{dataset_name}_{column_name}_metrics_comparison.csv"
+                metrics_df.to_csv(metrics_csv_path, index=False)
+                print(f"  📊 Metrics comparison table saved to: {metrics_csv_path}")
                 
                 # Calculate correlation with proper error handling
                 try:
@@ -561,31 +632,64 @@ def create_prediction_analysis_plot(dataset_name: str, column_folder: str, colum
                     correlation_reason = f"NaN (error: {str(e)})"
                     correlation_display = "NaN"
                 
-                # Create comprehensive metrics text
-                metrics_text = f'RMSE: {rmse:.3f}\nMAE: {mae:.3f}\nMAPE: {mape:.1f}%\nMASE: {mase:.3f}\nSMAPE: {smape:.1f}%\nCorrelation: {correlation_display}'
+                # Create comprehensive metrics text for all four prediction types
+                ft_sa_text = f'FT Steps Ahead:\nRMSE: {ft_sa_metrics[0]:.3f}\nMAE: {ft_sa_metrics[1]:.3f}\nMAPE: {ft_sa_metrics[2]:.1f}%\nMASE: {ft_sa_metrics[3]:.3f}\nSMAPE: {ft_sa_metrics[4]:.1f}%\nCorr: {"NaN" if pd.isna(ft_sa_metrics[5]) else f"{ft_sa_metrics[5]:.3f}"}'
                 
-                # Add metrics text box (positioned to avoid overlap with other text)
-                ax.text(0.98, 0.85, metrics_text, transform=ax.transAxes, fontsize=9,
-                        verticalalignment='top', horizontalalignment='right',
-                        bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.9))
+                zr_sa_text = f'ZR Steps Ahead:\nRMSE: {zr_sa_metrics[0]:.3f}\nMAE: {zr_sa_metrics[1]:.3f}\nMAPE: {zr_sa_metrics[2]:.1f}%\nMASE: {zr_sa_metrics[3]:.3f}\nSMAPE: {zr_sa_metrics[4]:.1f}%\nCorr: {"NaN" if pd.isna(zr_sa_metrics[5]) else f"{zr_sa_metrics[5]:.3f}"}'
+                
+                ft_ro_text = f'FT Rolling Origin:\nRMSE: {ft_ro_metrics[0]:.3f}\nMAE: {ft_ro_metrics[1]:.3f}\nMAPE: {ft_ro_metrics[2]:.1f}%\nMASE: {ft_ro_metrics[3]:.3f}\nSMAPE: {ft_ro_metrics[4]:.1f}%\nCorr: {"NaN" if pd.isna(ft_ro_metrics[5]) else f"{ft_ro_metrics[5]:.3f}"}'
+                
+                zr_ro_text = f'ZR Rolling Origin:\nRMSE: {zr_ro_metrics[0]:.3f}\nMAE: {zr_ro_metrics[1]:.3f}\nMAPE: {zr_ro_metrics[2]:.1f}%\nMASE: {zr_ro_metrics[3]:.3f}\nSMAPE: {zr_ro_metrics[4]:.1f}%\nCorr: {"NaN" if pd.isna(zr_ro_metrics[5]) else f"{zr_ro_metrics[5]:.3f}"}'
+                
+                # Metrics text boxes removed to avoid blocking prediction lines
+                # Metrics are now saved to a separate CSV file for better comparison
                 
                 # Print detailed metrics
-                print(f"  📊 Comparison Metrics:")
-                print(f"     RMSE: {rmse:.3f}")
-                print(f"     MAE: {mae:.3f}")
-                print(f"     MAPE: {mape:.1f}%")
-                print(f"     MASE: {mase:.3f}")
-                print(f"     SMAPE: {smape:.1f}%")
-                print(f"     Correlation: {correlation_reason}")
+                print(f"  📊 Fine-tuned Steps Ahead (FT SA) Metrics:")
+                print(f"     RMSE: {ft_sa_metrics[0]:.3f}")
+                print(f"     MAE: {ft_sa_metrics[1]:.3f}")
+                print(f"     MAPE: {ft_sa_metrics[2]:.1f}%")
+                print(f"     MASE: {ft_sa_metrics[3]:.3f}")
+                print(f"     SMAPE: {ft_sa_metrics[4]:.1f}%")
+                print(f"     Correlation: {'NaN' if pd.isna(ft_sa_metrics[5]) else f'{ft_sa_metrics[5]:.3f}'}")
                 
-                # Debug information for correlation issue
-                if pd.isna(correlation):
+                print(f"  📊 Zero-shot Steps Ahead (ZR SA) Metrics:")
+                print(f"     RMSE: {zr_sa_metrics[0]:.3f}")
+                print(f"     MAE: {zr_sa_metrics[1]:.3f}")
+                print(f"     MAPE: {zr_sa_metrics[2]:.1f}%")
+                print(f"     MASE: {zr_sa_metrics[3]:.3f}")
+                print(f"     SMAPE: {zr_sa_metrics[4]:.1f}%")
+                print(f"     Correlation: {'NaN' if pd.isna(zr_sa_metrics[5]) else f'{zr_sa_metrics[5]:.3f}'}")
+                
+                print(f"  📊 Fine-tuned Rolling Origin (FT RO) Metrics:")
+                print(f"     RMSE: {ft_ro_metrics[0]:.3f}")
+                print(f"     MAE: {ft_ro_metrics[1]:.3f}")
+                print(f"     MAPE: {ft_ro_metrics[2]:.1f}%")
+                print(f"     MASE: {ft_ro_metrics[3]:.3f}")
+                print(f"     SMAPE: {ft_ro_metrics[4]:.1f}%")
+                print(f"     Correlation: {'NaN' if pd.isna(ft_ro_metrics[5]) else f'{ft_ro_metrics[5]:.3f}'}")
+                
+                print(f"  📊 Zero-shot Rolling Origin (ZR RO) Metrics:")
+                print(f"     RMSE: {zr_ro_metrics[0]:.3f}")
+                print(f"     MAE: {zr_ro_metrics[1]:.3f}")
+                print(f"     MAPE: {zr_ro_metrics[2]:.1f}%")
+                print(f"     MASE: {zr_ro_metrics[3]:.3f}")
+                print(f"     SMAPE: {zr_ro_metrics[4]:.1f}%")
+                print(f"     Correlation: {'NaN' if pd.isna(zr_ro_metrics[5]) else f'{zr_ro_metrics[5]:.3f}'}")
+                
+                # Debug information for correlation issues
+                if any(pd.isna(metrics[5]) for metrics in [ft_sa_metrics, zr_sa_metrics, ft_ro_metrics, zr_ro_metrics]):
                     print(f"  🔍 Correlation Debug Info:")
                     print(f"     Actual values: {actual_values}")
-                    print(f"     Predicted values: {predicted_values}")
+                    if len(ft_sa_data) > 0:
+                        print(f"     FT SA Predicted values: {ft_sa_data['value'].values}")
+                    if len(zr_sa_data) > 0:
+                        print(f"     ZR SA Predicted values: {zr_sa_data['value'].values}")
+                    if len(ft_ro_data) > 0:
+                        print(f"     FT RO Predicted values: {ft_ro_data['value'].values}")
+                    if len(zr_ro_data) > 0:
+                        print(f"     ZR RO Predicted values: {zr_ro_data['value'].values}")
                     print(f"     Actual std: {np.std(actual_values):.6f}")
-                    print(f"     Predicted std: {np.std(predicted_values):.6f}")
-                    print(f"     Data types - Actual: {type(actual_values)}, Predicted: {type(predicted_values)}")
         else:
             # Fallback if we don't have enough data
             ax.text(0.5, 0.5, 'Insufficient data for comparison\nNeed at least 5 data points', 
@@ -605,11 +709,20 @@ def create_prediction_analysis_plot(dataset_name: str, column_folder: str, colum
         # Print statistics
         print(f"  📈 Prediction Statistics:")
         print(f"     Actual data points: {len(actual_data)}")
-        print(f"     Predicted data points: {len(predicted_data)}")
+        print(f"     Fine-tuned Steps Ahead (FT SA): {len(ft_sa_data)}")
+        print(f"     Zero-shot Steps Ahead (ZR SA): {len(zr_sa_data)}")
+        print(f"     Fine-tuned Rolling Origin (FT RO): {len(ft_ro_data)}")
+        print(f"     Zero-shot Rolling Origin (ZR RO): {len(zr_ro_data)}")
         if len(actual_data) > 0:
             print(f"     Actual value range: {actual_data['value'].min():.3f} to {actual_data['value'].max():.3f}")
-        if len(predicted_data) > 0:
-            print(f"     Predicted value range: {predicted_data['value'].min():.3f} to {predicted_data['value'].max():.3f}")
+        if len(ft_sa_data) > 0:
+            print(f"     FT SA predicted value range: {ft_sa_data['value'].min():.3f} to {ft_sa_data['value'].max():.3f}")
+        if len(zr_sa_data) > 0:
+            print(f"     ZR SA predicted value range: {zr_sa_data['value'].min():.3f} to {zr_sa_data['value'].max():.3f}")
+        if len(ft_ro_data) > 0:
+            print(f"     FT RO predicted value range: {ft_ro_data['value'].min():.3f} to {ft_ro_data['value'].max():.3f}")
+        if len(zr_ro_data) > 0:
+            print(f"     ZR RO predicted value range: {zr_ro_data['value'].min():.3f} to {zr_ro_data['value'].max():.3f}")
         
     except Exception as e:
         print(f"⚠️  Error creating prediction analysis plot: {e}")
@@ -789,7 +902,8 @@ def run_all_steps(dataset_name: str, test_mode=False, max_columns=2):
             "--dataset-path", f"Dataset/Dataset.arrow/{dataset_name}_{column_name}.arrow",
             "--output-path", f"{column_folder}/{dataset_name}_{column_name}_predictions.csv",
             "--prediction-length", str(prediction_length),
-            "--use-inference-model"
+            "--use-inference-model",
+            "--enable-zero-shot"
         ]
         run_command(eval_cmd, f"Step 3: Running evaluation for {column_name}...")
         
