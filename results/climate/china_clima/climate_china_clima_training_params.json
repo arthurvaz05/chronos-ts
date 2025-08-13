@@ -1,6 +1,6 @@
 {
   "dataset_name": "climate",
-  "column_name": "usa_clima",
+  "column_name": "china_clima",
   "model_id": "amazon/chronos-t5-base",
   "prediction_length": 5,
   "context_length": 64,
@@ -26,6 +26,6 @@
   "torch_compile": false,
   "output_dir": "results/climate/training",
   "top_p": 0.9,
-  "training_run": "run-28",
-  "timestamp": "2025-08-13T16:34:46.523047"
+  "training_run": "run-29",
+  "timestamp": "2025-08-13T16:53:32.810871"
 }

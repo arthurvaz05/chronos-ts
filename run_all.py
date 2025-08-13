@@ -6,21 +6,22 @@ import json
 from scripts.generate_ts import read_transform_data, convert_to_arrow
 import yaml
 
-def prepare_data(csv_path: str, arrow_path: str, test_mode: bool = False):
+def prepare_data(csv_path: str, arrow_path: str, test_mode: bool = False, max_columns: int = 2):
     """
     Reads the climate dataset from CSV and converts it to Arrow format.
     
     Args:
         csv_path: Path to the CSV file
         arrow_path: Path to save the Arrow file
-        test_mode: If True, only process the first column
+        test_mode: If True, only process limited columns
+        max_columns: Maximum number of columns to process (0 = all columns)
     """
     print("Preparing data: converting CSV to Arrow format...")
     
     # Import here to avoid circular imports
     from scripts.generate_ts import read_transform_data, convert_to_arrow
     
-    time_series = read_transform_data(csv_path, test_mode)
+    time_series = read_transform_data(csv_path, test_mode, max_columns)
     convert_to_arrow(arrow_path, time_series=time_series)
     print(f"Data written to {arrow_path}\n")
 
@@ -77,7 +78,7 @@ def generate_yaml_config(dataset_name: str, column_name: str, prediction_length:
         yaml.dump(config, f, sort_keys=False)
     print(f"YAML config written to {config_path}")
 
-def create_dataset_column_folders(dataset_name: str, csv_path: str, test_mode=False):
+def create_dataset_column_folders(dataset_name: str, csv_path: str, test_mode=False, max_columns=2):
     """
     Create organized folder structure for each dataset and its columns.
     
@@ -97,13 +98,23 @@ def create_dataset_column_folders(dataset_name: str, csv_path: str, test_mode=Fa
     column_folders = {}
     
     if test_mode:
-        # Test mode: only first column
+        # Test mode: limited number of columns
         if len(df.columns) > 0:
-            col = df.columns[0]
-            column_folder = f"{dataset_folder}/{col}"
-            os.makedirs(column_folder, exist_ok=True)
-            column_folders[col] = column_folder
-            print(f"TEST MODE: Created folder for first column only: {column_folder}")
+            if max_columns == 0:
+                # Process all columns
+                for col in df.columns:
+                    column_folder = f"{dataset_folder}/{col}"
+                    os.makedirs(column_folder, exist_ok=True)
+                    column_folders[col] = column_folder
+                print(f"TEST MODE: Created folders for ALL columns: {len(column_folders)} columns")
+            else:
+                # Process limited number of columns
+                for i in range(min(max_columns, len(df.columns))):
+                    col = df.columns[i]
+                    column_folder = f"{dataset_folder}/{col}"
+                    os.makedirs(column_folder, exist_ok=True)
+                    column_folders[col] = column_folder
+                print(f"TEST MODE: Created folders for first {len(column_folders)} columns: {list(column_folders.keys())}")
     else:
         # Normal mode: all columns
         for col in df.columns:
@@ -711,121 +722,174 @@ def get_inference_config(dataset_name: str, max_run: int):
         "note": "Inference parameters optimized for maximum prediction quality"
     }
 
-def run_all_steps(dataset_name: str, test_mode=False):
+def run_all_steps(dataset_name: str, test_mode=False, max_columns=2):
     # Create organized folder structure for this dataset
     csv_path = f"Dataset/{dataset_name}.csv"
-    column_folders = create_dataset_column_folders(dataset_name, csv_path, test_mode)
+    column_folders = create_dataset_column_folders(dataset_name, csv_path, test_mode, max_columns)
     
     # Set prediction length parameter
     prediction_length = 5
     
-    # Get the first column name for naming the arrow file
-    df = pd.read_csv(csv_path)
-    first_column_name = df.columns[0] if len(df.columns) > 0 else "unknown"
-    
-    # Generate YAML config for evaluation (move to the top)
-    generate_yaml_config(dataset_name, first_column_name, prediction_length=prediction_length)
-    
-    # Step 1: Data preparation
-    prepare_data(f"Dataset/{dataset_name}.csv", f"Dataset/Dataset.arrow/{dataset_name}_{first_column_name}.arrow", test_mode)
-    
-    # Step 2: Training (direct call without config file)
-    # Get centralized training configuration
-    training_config = get_training_config(dataset_name, prediction_length)
-    
-    commands = [
-        [
-            "python", "scripts/training/train.py", 
-            f"['Dataset/Dataset.arrow/{dataset_name}_{first_column_name}.arrow']",  # Pass as string representation of list
-            "--model-id", training_config["model_id"],
-            "--prediction-length", str(training_config["prediction_length"]),
-            "--context-length", str(training_config["context_length"]),
-            "--min-past", str(training_config["min_past"]),
-            "--max-steps", str(training_config["max_steps"]),
-            "--save-steps", str(training_config["save_steps"]),
-            "--log-steps", str(training_config["log_steps"]),
-            "--per-device-train-batch-size", str(training_config["per_device_train_batch_size"]),
-            "--learning-rate", str(training_config["learning_rate"]),
-            "--warmup-ratio", str(training_config["warmup_ratio"]),
-            "--gradient-accumulation-steps", str(training_config["gradient_accumulation_steps"]),
-            "--lr-scheduler-type", training_config["lr_scheduler_type"],
-            "--shuffle-buffer-length", str(training_config["shuffle_buffer_length"]),
-            "--random-init" if training_config["random_init"] else "--no-random-init",
-            "--num-samples", str(training_config["num_samples"]),
-            "--temperature", str(training_config["temperature"]),
-            "--top-k", str(training_config["top_k"]),
-            "--seed", str(training_config["seed"]),
-            "--n-tokens", str(training_config["n_tokens"]),
-            "--tokenizer-kwargs", training_config["tokenizer_kwargs"],
-            "--output-dir", training_config["output_dir"],
-            "--dataloader-num-workers", str(training_config["dataloader_num_workers"]),
-            "--max-missing-prop", str(training_config["max_missing_prop"]),
-            "--no-torch-compile" if not training_config["torch_compile"] else "--torch-compile"
+    # Process each column separately
+    for column_name in column_folders.keys():
+        print(f"\n🔄 Processing column: {column_name}")
+        
+        # Generate YAML config for evaluation
+        generate_yaml_config(dataset_name, column_name, prediction_length=prediction_length)
+        
+        # Step 1: Data preparation for this column
+        prepare_data(f"Dataset/{dataset_name}.csv", f"Dataset/Dataset.arrow/{dataset_name}_{column_name}.arrow", test_mode, max_columns)
+        
+        # Step 2: Training for this column
+        training_config = get_training_config(dataset_name, prediction_length)
+        
+        commands = [
+            [
+                "python", "scripts/training/train.py", 
+                f"['Dataset/Dataset.arrow/{dataset_name}_{column_name}.arrow']",
+                "--model-id", training_config["model_id"],
+                "--prediction-length", str(training_config["prediction_length"]),
+                "--context-length", str(training_config["context_length"]),
+                "--min-past", str(training_config["min_past"]),
+                "--max-steps", str(training_config["max_steps"]),
+                "--save-steps", str(training_config["save_steps"]),
+                "--log-steps", str(training_config["log_steps"]),
+                "--per-device-train-batch-size", str(training_config["per_device_train_batch_size"]),
+                "--learning-rate", str(training_config["learning_rate"]),
+                "--warmup-ratio", str(training_config["warmup_ratio"]),
+                "--gradient-accumulation-steps", str(training_config["gradient_accumulation_steps"]),
+                "--lr-scheduler-type", training_config["lr_scheduler_type"],
+                "--shuffle-buffer-length", str(training_config["shuffle_buffer_length"]),
+                "--random-init" if training_config["random_init"] else "--no-random-init",
+                "--num-samples", str(training_config["num_samples"]),
+                "--temperature", str(training_config["temperature"]),
+                "--top-k", str(training_config["top_k"]),
+                "--seed", str(training_config["seed"]),
+                "--n-tokens", str(training_config["n_tokens"]),
+                "--tokenizer-kwargs", training_config["tokenizer_kwargs"],
+                "--output-dir", training_config["output_dir"],
+                "--dataloader-num-workers", str(training_config["dataloader_num_workers"]),
+                "--max-missing-prop", str(training_config["max_missing_prop"]),
+                "--no-torch-compile" if not training_config["torch_compile"] else "--torch-compile"
+            ]
         ]
-    ]
-    step_names = [
-        "Step 2: Running training..."
-    ]
-    for cmd, step in zip(commands, step_names):
-        run_command(cmd, step)
+        step_names = [
+            f"Step 2: Running training for {column_name}..."
+        ]
+        for cmd, step in zip(commands, step_names):
+            run_command(cmd, step)
+        
+        # Step 3: Evaluation for this column
+        latest_checkpoint = get_latest_run_dir(f"results/{dataset_name}/training")
+        column_folder = column_folders[column_name]
+        
+        eval_cmd = [
+            "python", "scripts/evaluation/evaluate_local_with_predictions.py",
+            "--model-path", latest_checkpoint,
+            "--dataset-path", f"Dataset/Dataset.arrow/{dataset_name}_{column_name}.arrow",
+            "--output-path", f"{column_folder}/{dataset_name}_{column_name}_predictions.csv",
+            "--prediction-length", str(prediction_length),
+            "--use-inference-model"
+        ]
+        run_command(eval_cmd, f"Step 3: Running evaluation for {column_name}...")
+        
+        # Step 4: Create prediction analysis plot for this column
+        create_prediction_analysis_plot(dataset_name, column_folder, column_name)
+        
+        # Step 5: Save training history and create training charts for this column
+        save_training_history_and_charts(dataset_name, column_folder, column_name)
+        
+        print(f"✅ Completed processing for column: {column_name}")
     
-    # Step 3: Evaluation (after training, get the latest checkpoint)
-    latest_checkpoint = get_latest_run_dir(f"results/{dataset_name}/training")
+    print("All steps completed successfully for all columns.")
     
-    # Get the first column folder for saving results directly
-    column_name = list(column_folders.keys())[0]
-    column_folder = column_folders[column_name]
-    
-    eval_cmd = [
-        "python", "scripts/evaluation/evaluate_local_with_predictions.py",
-        "--model-path", latest_checkpoint,
-        "--dataset-path", f"Dataset/Dataset.arrow/{dataset_name}_{first_column_name}.arrow",
-        "--output-path", f"{column_folder}/{dataset_name}_{column_name}_predictions.csv",
-        "--prediction-length", str(prediction_length),
-        "--use-inference-model"  # Use larger model for inference
-    ]
-    run_command(eval_cmd, "Step 3: Running evaluation...")
-    print("All steps completed successfully.")
-    
-    # Step 4: Create prediction analysis plot
-    create_prediction_analysis_plot(dataset_name, column_folder, column_name)
-    
-    # Step 6: Save training history and create training charts
-    save_training_history_and_charts(dataset_name, column_folder, column_name)
-    
-    # Step 7: Organize results by column (now just copy training outputs)
+    # Step 6: Organize results by column
     organize_results_by_column(dataset_name, column_folders)
 
 def main():
-    print("🧪 TEST MODE: Starting Chronos Forecasting Pipeline (All Datasets, First Column Only)")
+    import argparse
+    
+    # Set up command line argument parsing
+    parser = argparse.ArgumentParser(description='Chronos Forecasting Pipeline with configurable datasets and columns')
+    parser.add_argument('--datasets', type=int, default=1, 
+                       help='Number of datasets to process (default: 1, max: 5)')
+    parser.add_argument('--columns', type=int, default=2, 
+                       help='Number of columns per dataset to process (default: 2, 0 = all columns)')
+    parser.add_argument('--all-datasets', action='store_true', 
+                       help='Process all available datasets (overrides --datasets)')
+    parser.add_argument('--all-columns', action='store_true', 
+                       help='Process all columns in each dataset (overrides --columns)')
+    parser.add_argument('--prediction-length', type=int, default=5, 
+                       help='Number of values to predict (default: 5)')
+    
+    args = parser.parse_args()
+    
+    # Validate arguments
+    if args.datasets < 1 or args.datasets > 5:
+        print("⚠️  Warning: --datasets must be between 1 and 5. Setting to 1.")
+        args.datasets = 1
+    
+    if args.columns < 0:
+        print("⚠️  Warning: --columns cannot be negative. Setting to 0 (all columns).")
+        args.columns = 0
+    
+    # Determine configuration
+    if args.all_datasets:
+        datasets_to_process = ["climate", "emissions-co2", "gdp", "pesticides", "fertilizers"]
+        print("🚀 FULL MODE: Processing ALL datasets")
+    else:
+        datasets_to_process = ["climate", "emissions-co2", "gdp", "pesticides", "fertilizers"][:args.datasets]
+        print(f"📊 LIMITED MODE: Processing {len(datasets_to_process)} dataset(s)")
+    
+    if args.all_columns:
+        columns_per_dataset = 0
+        print("📈 Processing ALL columns in each dataset")
+    else:
+        columns_per_dataset = args.columns
+        print(f"📈 Processing {columns_per_dataset} column(s) per dataset")
+    
+    print(f"🎯 Prediction length: {args.prediction_length}")
+    print(f"📊 Available datasets: {len(['climate', 'emissions-co2', 'gdp', 'pesticides', 'fertilizers'])}")
     print("=" * 70)
     
     # Create main results directory
     os.makedirs("results", exist_ok=True)
     
-    # Keep all datasets but test with first column only
-    dataset_names = ["climate", "emissions-co2", "gdp", "pesticides", "fertilizers"]
-
-    for i, dataset_name in enumerate(dataset_names, 1):
-        print(f"\n📊 Processing Dataset {i}/{len(dataset_names)}: {dataset_name} (First Column Only)")
+    # Process datasets
+    for i, dataset_name in enumerate(datasets_to_process, 1):
+        print(f"\n📊 Processing Dataset {i}/{len(datasets_to_process)}: {dataset_name}")
         print("-" * 50)
-        run_all_steps(dataset_name, test_mode=True)
         
-        # Break after first dataset for testing
-        print(f"\n🧪 TEST COMPLETED: Stopping after first dataset '{dataset_name}'")
-        print("To run all datasets, remove the break statement in the code.")
-        break
+        # Set test_mode based on column configuration
+        test_mode = columns_per_dataset > 0  # True if limited columns, False if all columns
+        
+        run_all_steps(dataset_name, test_mode=test_mode, max_columns=columns_per_dataset)
+        
+        # Break if we've processed the requested number of datasets
+        if not args.all_datasets and i >= args.datasets:
+            print(f"\n✅ COMPLETED: Processed {i} dataset(s) as requested")
+            break
     
-    print("\n🎉 Test completed successfully!")
+    print("\n🎉 Pipeline completed successfully!")
     print("\n📁 Results organized in the following structure:")
     print("results/")
-    for dataset_name in dataset_names:
+    for dataset_name in datasets_to_process:
         print(f"  ├── {dataset_name}/")
         print(f"  │   ├── training/          # Training outputs")
-        print(f"  │   ├── metrics.csv        # Evaluation metrics")
-        print(f"  │   ├── predictions.csv    # Predictions data")
-        print(f"  │   └── [first_column]/   # First column folder only (TEST MODE)")
+        if args.all_columns:
+            print(f"  │   └── [all_columns]/      # All columns processed")
+        else:
+            print(f"  │   └── [first_{columns_per_dataset}_columns]/   # First {columns_per_dataset} columns")
         print(f"  └── ...")
+    
+    print(f"\n💡 Usage examples:")
+    print(f"  python run_all.py                           # Default: 1 dataset, 2 columns")
+    print(f"  python run_all.py --datasets 3              # 3 datasets, 2 columns each")
+    print(f"  python run_all.py --columns 1               # 1 dataset, 1 column")
+    print(f"  python run_all.py --all-datasets            # All datasets, 2 columns each")
+    print(f"  python run_all.py --all-columns             # 1 dataset, all columns")
+    print(f"  python run_all.py --all-datasets --all-columns  # All datasets, all columns")
+    print(f"  python run_all.py --prediction-length 10    # Predict 10 values")
 
 if __name__ == "__main__":
     main() 

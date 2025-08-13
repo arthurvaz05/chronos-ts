@@ -6,14 +6,15 @@ import numpy as np
 from gluonts.dataset.arrow import ArrowWriter
 
 
-def read_transform_data(csv_path: Union[str, Path], test_mode: bool = False) -> List[np.ndarray]:
+def read_transform_data(csv_path: Union[str, Path], test_mode: bool = False, max_columns: int = 2) -> List[np.ndarray]:
     """
     Read CSV data and transform it into time series format.
     Each column represents an independent time series.
     
     Args:
         csv_path: Path to the CSV file
-        test_mode: If True, only process the first column
+        test_mode: If True, only process limited columns
+        max_columns: Maximum number of columns to process (0 = all columns)
         
     Returns:
         List of numpy arrays, each representing a time series
@@ -26,12 +27,21 @@ def read_transform_data(csv_path: Union[str, Path], test_mode: bool = False) -> 
     time_series = []
     
     if test_mode:
-        # In test mode, only process the first column
-        col = df.columns[0]
-        series = df[col].dropna().values
-        if len(series) > 0:
-            time_series.append(series.astype(np.float32))
-        print(f"🧪 TEST MODE: Processing only first column '{col}' with {len(series)} values")
+        if max_columns == 0:
+            # Process all columns
+            for col in df.columns:
+                series = df[col].dropna().values
+                if len(series) > 0:
+                    time_series.append(series.astype(np.float32))
+            print(f"🧪 TEST MODE: Processing ALL columns ({len(df.columns)})")
+        else:
+            # Process limited number of columns
+            for i in range(min(max_columns, len(df.columns))):
+                col = df.columns[i]
+                series = df[col].dropna().values
+                if len(series) > 0:
+                    time_series.append(series.astype(np.float32))
+            print(f"🧪 TEST MODE: Processing first {len(time_series)} columns: {list(df.columns[:max_columns])}")
     else:
         # Process all columns
         for col in df.columns:
