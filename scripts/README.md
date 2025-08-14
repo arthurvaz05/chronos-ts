@@ -109,6 +109,8 @@
 
 ## Evaluating Chronos models
 
+### Standard Evaluation (Paper Benchmarks)
+
 Follow these steps to compute the WQL and MASE values for the in-domain and zero-shot benchmarks in our paper.
 
 - Install this package with with the `evaluation` extra:
@@ -151,3 +153,96 @@ Follow these steps to compute the WQL and MASE values for the in-domain and zero
 
     agg_score_df = agg_relative_score(result_df, baseline_df)
     ```
+
+### Local Evaluation with Predictions
+
+The `evaluate_local_with_predictions.py` script provides a comprehensive local evaluation workflow that compares fine-tuned models against zero-shot baselines using both steps-ahead and rolling origin approaches.
+
+#### Features
+
+- **Fine-tuned vs Zero-shot Comparison**: Evaluates your trained model against the base Chronos model
+- **Multiple Prediction Strategies**: 
+  - **Steps Ahead (SA)**: Predicts next N values from the end of the time series
+  - **Rolling Origin (RO)**: Makes multiple predictions from different starting points and averages them
+- **Comprehensive Output**: Saves results with clear labels for training data, validation data, and all prediction types
+- **Inference Configuration**: Automatically loads saved inference parameters from training runs
+
+#### Usage Examples
+
+**Basic Usage (Climate Dataset Example):**
+```sh
+# Evaluate a fine-tuned climate model
+python scripts/evaluation/evaluate_local_with_predictions.py \
+    --model-path "results/climate/usa_clima/climate_usa_clima_training_outputs/run-0/checkpoint-final" \
+    --dataset-path "Dataset/climate_usa_clima.arrow" \
+    --output-path "evaluation/results/climate_usa_clima_predictions.csv" \
+    --prediction-length 5
+```
+
+**Custom Prediction Length:**
+```sh
+# Predict next 10 values instead of 5
+python scripts/evaluation/evaluate_local_with_predictions.py \
+    --model-path "results/climate/usa_clima/climate_usa_clima_training_outputs/run-0/checkpoint-final" \
+    --dataset-path "Dataset/climate_usa_clima.arrow" \
+    --output-path "evaluation/results/climate_usa_clima_predictions_10steps.csv" \
+    --prediction-length 10
+```
+
+**Using Trained Model Directly (instead of inference model):**
+```sh
+# Use the actual trained model instead of a larger inference model
+python scripts/evaluation/evaluate_local_with_predictions.py \
+    --model-path "results/climate/usa_clima/climate_usa_clima_training_outputs/run-0/checkpoint-final" \
+    --dataset-path "Dataset/climate_usa_clima.arrow" \
+    --output-path "evaluation/results/climate_usa_clima_predictions.csv" \
+    --prediction-length 5 \
+    --no-use-inference-model
+```
+
+**Disable Zero-shot Comparison:**
+```sh
+# Only evaluate fine-tuned model (faster execution)
+python scripts/evaluation/evaluate_local_with_predictions.py \
+    --model-path "results/climate/usa_clima/climate_usa_clima_training_outputs/run-0/checkpoint-final" \
+    --dataset-path "Dataset/climate_usa_clima.arrow" \
+    --output-path "evaluation/results/climate_usa_clima_predictions.csv" \
+    --prediction-length 5 \
+    --no-enable-zero-shot
+```
+
+#### Output Format
+
+The script generates a CSV file with the following columns:
+- `timestamp`: Time index for each value
+- `value`: Numerical value (actual or predicted)
+- `type`: Label indicating the data type:
+  - `actual`: Training and validation data
+  - `predicted FT SA`: Fine-tuned Steps Ahead predictions
+  - `predicted ZR SA`: Zero-shot Steps Ahead predictions  
+  - `predicted FT RO`: Fine-tuned Rolling Origin predictions
+  - `predicted ZR RO`: Zero-shot Rolling Origin predictions
+
+#### Understanding the Results
+
+1. **Training Data**: Historical values used for model training
+2. **Validation Data**: Last N values (where N = prediction_length) - these are the "ground truth" for comparison
+3. **Predictions**: Four types of forecasts for the validation period:
+   - **FT SA**: Your fine-tuned model's direct prediction
+   - **ZR SA**: Base Chronos model's direct prediction
+   - **FT RO**: Your fine-tuned model's rolling origin prediction (more robust)
+   - **ZR RO**: Base Chronos model's rolling origin prediction
+
+#### Performance Tips
+
+- **GPU Usage**: The script automatically uses GPU if available
+- **Memory**: For large models, consider using `--no-use-inference-model` to use your trained model directly
+- **Speed**: Disable zero-shot evaluation with `--no-enable-zero-shot` for faster execution
+- **Rolling Origin**: The script uses 3 rolls by default for rolling origin predictions, which provides more robust forecasts
+
+#### Troubleshooting
+
+- **Model Loading Issues**: Ensure your model path points to a valid checkpoint directory
+- **Dataset Format**: Make sure your dataset is in GluonTS Arrow format
+- **Memory Errors**: Try using a smaller model or reduce prediction length
+- **Inference Config**: The script automatically looks for saved inference parameters in `results/{dataset_name}/{column_name}/`

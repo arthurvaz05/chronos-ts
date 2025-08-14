@@ -325,10 +325,64 @@ def main():
     
     args = parser.parse_args()
     
+    # ============================================================================
+    # EXAMPLE: How to execute this script from terminal
+    # ============================================================================
+    # 
+    # TERMINAL EXECUTION EXAMPLES:
+    # 
+    # 1. Basic evaluation (Climate USA model):
+    #    python scripts/evaluation/evaluate_local_with_predictions.py \
+    #        --model-path "results/climate/usa_clima/climate_usa_clima_training_outputs/run-0/checkpoint-final" \
+    #        --dataset-path "Dataset/climate_usa_clima.arrow" \
+    #        --output-path "evaluation/results/climate_usa_clima_predictions.csv" \
+    #        --prediction-length 5
+    # 
+    # 2. Custom prediction length (10 steps):
+    #    python scripts/evaluation/evaluate_local_with_predictions.py \
+    #        --model-path "results/climate/usa_clima/climate_usa_clima_training_outputs/run-0/checkpoint-final" \
+    #        --dataset-path "Dataset/climate_usa_clima.arrow" \
+    #        --output-path "evaluation/results/climate_usa_clima_predictions_10steps.csv" \
+    #        --prediction-length 10
+    # 
+    # 3. Use trained model directly (no inference model):
+    #    python scripts/evaluation/evaluate_local_with_predictions.py \
+    #        --model-path "results/climate/usa_clima/climate_usa_clima_training_outputs/run-0/checkpoint-final" \
+    #        --dataset-path "Dataset/climate_usa_clima.arrow" \
+    #        --output-path "evaluation/results/climate_usa_clima_predictions.csv" \
+    #        --prediction-length 5 \
+    #        --no-use-inference-model
+    # 
+    # 4. Disable zero-shot comparison (faster execution):
+    #    python scripts/evaluation/evaluate_local_with_predictions.py \
+    #        --model-path "results/climate/usa_clima/climate_usa_clima_training_outputs/run-0/checkpoint-final" \
+    #        --dataset-path "Dataset/climate_usa_clima.arrow" \
+    #        --output-path "evaluation/results/climate_usa_clima_predictions.csv" \
+    #        --prediction-length 5 \
+    #        --no-enable-zero-shot
+    # 
+    # PROGRAMMATIC USAGE (if you want to import and use functions):
+    # 
+    # from scripts.evaluation.evaluate_local_with_predictions import *
+    # 
+    # # Example 1: Basic evaluation
+    # ft_pipeline, _ = load_model("results/climate/usa_clima/climate_usa_clima_training_outputs/run-0/checkpoint-final")
+    # dataset = load_dataset("Dataset/climate_usa_clima.arrow")
+    # time_series = dataset[0]["target"]
+    # 
+    # # Make predictions
+    # ft_sa_values = predict_next_values(ft_pipeline, time_series, prediction_length=5)
+    # ft_ro_values = predict_rolling_origin(ft_pipeline, time_series, prediction_length=5)
+    # 
+    # # Save results
+    # save_results_with_labels(time_series, ft_sa_values, None, ft_ro_values, None, "results.csv", 5)
+    # 
+    # ============================================================================
+    
     # Extract dataset and column names from the dataset path for inference config
     dataset_path_parts = args.dataset_path.split('/')
     if len(dataset_path_parts) >= 3:
-        dataset_name = dataset_path_parts[-2]  # e.g., "climate" from "Dataset/Dataset.arrow/climate_usa_clima.arrow"
+        dataset_name = dataset_path_parts[-2]  # e.g., "climate" from "climate_usa_clima.arrow"
         column_name = dataset_path_parts[-1].replace('.arrow', '').split('_', 1)[1]  # e.g., "usa_clima" from "climate_usa_clima.arrow"
     else:
         dataset_name = "unknown"
