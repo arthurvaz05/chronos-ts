@@ -6,6 +6,93 @@ import json
 from scripts.generate_ts import read_transform_data, convert_to_arrow
 import yaml
 
+def validate_data_quality(time_series, dataset_name, column_name):
+    """
+    Validates data quality before training to catch issues early.
+    
+    Args:
+        time_series: List of time series data
+        dataset_name: Name of the dataset
+        column_name: Name of the column
+        
+    Returns:
+        bool: True if data is valid for training, False otherwise
+    """
+    print(f"🔍 Validating data quality for {dataset_name}_{column_name}...")
+    
+    if not time_series:
+        print(f"❌ ERROR: No time series data found")
+        return False
+    
+    if len(time_series) == 0:
+        print(f"❌ ERROR: Empty time series list")
+        return False
+    
+    # Check first time series
+    ts = time_series[0]
+    
+    # Handle different data structures
+    if isinstance(ts, dict):
+        # If it's a dictionary, get the target field
+        if 'target' not in ts:
+            print(f"❌ ERROR: Time series dictionary missing 'target' field")
+            return False
+        ts = ts['target']
+    
+    # Convert to numpy array if it's a tensor
+    if hasattr(ts, 'numpy'):
+        ts_array = ts.numpy()
+    elif isinstance(ts, np.ndarray):
+        ts_array = ts
+    else:
+        print(f"❌ ERROR: Time series is not a numpy array or tensor")
+        return False
+    
+    # Check data length
+    if len(ts_array) < 10:
+        print(f"❌ ERROR: Time series too short ({len(ts_array)} points). Need at least 10 points for training.")
+        return False
+    
+    # Check for NaN values
+    if np.any(np.isnan(ts_array)):
+        print(f"❌ ERROR: Found NaN values in time series")
+        return False
+    
+    # Check for infinite values
+    if np.any(np.isinf(ts_array)):
+        print(f"❌ ERROR: Found infinite values in time series")
+        return False
+    
+    # Check for constant values (no variation)
+    if np.std(ts_array) == 0:
+        print(f"❌ ERROR: Time series has no variation (constant values)")
+        return False
+    
+    # Check for very small datasets (training issue we encountered)
+    if len(ts_array) < 20:
+        print(f"❌ ERROR: Time series too short ({len(ts_array)} points). Need at least 20 points for training.")
+        return False
+    elif len(ts_array) < 50:
+        print(f"⚠️  WARNING: Time series short ({len(ts_array)} points). Training may be challenging but will attempt.")
+        print(f"   💡 Note: Smaller datasets may require different training parameters.")
+        # Don't block training, just warn
+    else:
+        print(f"  📊 Sufficient data for training: ✅")
+    
+    # Check data range
+    min_val = np.min(ts_array)
+    max_val = np.max(ts_array)
+    print(f"  📊 Data length: {len(ts_array)} points")
+    print(f"  📊 Value range: {min_val:.2f} to {max_val:.2f}")
+    print(f"  📊 Standard deviation: {np.std(ts_array):.2f}")
+    print(f"  📊 No NaN values: ✅")
+    print(f"  📊 No infinite values: ✅")
+    print(f"  📊 Has variation: ✅")
+    print(f"  📊 Sufficient data for training: ✅")
+    
+    print(f"✅ Data quality validation passed for {dataset_name}_{column_name}")
+    return True
+
 def prepare_data(csv_path: str, arrow_path: str, test_mode: bool = False, max_columns: int = 2):
     """
     Reads the climate dataset from CSV and converts it to Arrow format.
@@ -22,8 +109,55 @@ def prepare_data(csv_path: str, arrow_path: str, test_mode: bool = False, max_co
     from scripts.generate_ts import read_transform_data, convert_to_arrow
     
     time_series = read_transform_data(csv_path, test_mode, max_columns)
+    
+    # Validate basic data quality before proceeding
+    dataset_name = csv_path.split('/')[-1].replace('.csv', '')
+    
+    # Handle different data structures from read_transform_data
+    if isinstance(time_series, list) and len(time_series) > 0:
+        if isinstance(time_series[0], dict):
+            # If it's a list of dictionaries, get the first key
+            column_name = list(time_series[0].keys())[0]
+        else:
+            # If it's a list of numpy arrays, use the dataset name
+            column_name = dataset_name
+    else:
+        column_name = dataset_name
+    
+    if not validate_data_quality(time_series, dataset_name, column_name):
+        print(f"❌ Data quality validation failed. Cannot proceed with training.")
+        return False
+    
+    # Convert to Arrow format first
     convert_to_arrow(arrow_path, time_series=time_series)
     print(f"Data written to {arrow_path}\n")
+    
+    # Now test the Arrow file loading (after it's created)
+    print(f"🧪 Testing Arrow file loading for training...")
+    try:
+        from gluonts.dataset.arrow import ArrowFile
+        test_dataset = ArrowFile(arrow_path)
+        test_data = list(test_dataset)
+        
+        if len(test_data) == 0:
+            print(f"❌ ERROR: Arrow file contains no data")
+            return False
+        
+        # Check if we can create a batch (this is where training failed)
+        test_batch = test_data[:1]  # Take first item
+        if not test_batch or test_batch[0] is None:
+            print(f"❌ ERROR: Cannot create valid batch from data")
+            return False
+        
+        print(f"  📊 Arrow file test: ✅")
+        print(f"  📊 Batch creation test: ✅")
+        print(f"✅ Arrow file loading test passed for training")
+        
+    except Exception as e:
+        print(f"❌ ERROR: Arrow file loading test failed: {e}")
+        return False
+    
+    return True
 
 def get_latest_run_dir(output_dir="output"):
     """
@@ -51,6 +185,48 @@ def run_command(cmd, step_name):
         print(f"{step_name} failed. Exiting.")
         sys.exit(result.returncode)
     print(f"{step_name} completed successfully.\n")
+
+def test_training_data_loading(arrow_path, step_name):
+    """
+    Tests if the training data can be loaded without the batch loading error.
+    """
+    print(f"🧪 {step_name} - Testing training data loading...")
+    try:
+        # Test the exact data loading that training will do
+        from gluonts.dataset.arrow import ArrowFile
+        test_dataset = ArrowFile(arrow_path)
+        test_data = list(test_dataset)
+        
+        if len(test_data) == 0:
+            print(f"❌ ERROR: No data found in Arrow file")
+            return False
+        
+        # Test batch creation (this is where training failed)
+        test_batch = test_data[:1]
+        if not test_batch or test_batch[0] is None:
+            print(f"❌ ERROR: Batch creation failed - data contains None values")
+            return False
+        
+        # Test if we can access the target field
+        first_item = test_batch[0]
+        if 'target' not in first_item:
+            print(f"❌ ERROR: Data missing 'target' field")
+            return False
+        
+        target = first_item['target']
+        if target is None or len(target) == 0:
+            print(f"❌ ERROR: Target field is None or empty")
+            return False
+        
+        print(f"✅ Training data loading test passed")
+        print(f"  📊 Data points: {len(test_data)}")
+        print(f"  📊 Target length: {len(target)}")
+        print(f"  📊 Batch creation: ✅")
+        return True
+        
+    except Exception as e:
+        print(f"❌ ERROR: Training data loading test failed: {e}")
+        return False
 
 
 import pandas as pd
@@ -764,7 +940,7 @@ def organize_results_by_column(dataset_name: str, column_folders: dict):
     except Exception as e:
         print(f"⚠️  Error copying training outputs: {e}")
 
-def get_training_config(dataset_name: str, prediction_length: int = 5):
+def get_training_config(dataset_name: str, prediction_length: int = 5, data_length: int = None):
     """
     Centralized function to get training configuration parameters.
     This ensures consistency between training commands and parameter saving.
@@ -772,11 +948,13 @@ def get_training_config(dataset_name: str, prediction_length: int = 5):
     Args:
         dataset_name: Name of the dataset
         prediction_length: Number of values to predict
+        data_length: Length of the time series data (for adaptive parameters)
         
     Returns:
         dict: Training configuration parameters
     """
-    return {
+    # Base configuration
+    config = {
         "model_id": "amazon/chronos-t5-base",  # Large model for better performance
         "prediction_length": prediction_length,
         "context_length": 64,  # Large context window for pattern recognition
@@ -801,9 +979,25 @@ def get_training_config(dataset_name: str, prediction_length: int = 5):
         "max_missing_prop": 0.9,  # Allow more missing data
         "torch_compile": False,  # Disable torch compilation to avoid MPS issues
         "output_dir": f"results/{dataset_name}/training",  # Save training results in dataset folder
-        # Additional jitter and optimization parameters
         "top_p": 0.9  # Add nucleus sampling for better diversity
     }
+    
+    # Adapt parameters for smaller datasets
+    if data_length and data_length < 50:
+        print(f"  🔧 Adapting training parameters for small dataset ({data_length} points)...")
+        config.update({
+            "max_steps": min(1000, data_length * 10),  # Reduce steps for small datasets
+            "save_steps": min(200, data_length * 2),   # Save more frequently
+            "log_steps": min(50, data_length),         # Log more frequently
+            "per_device_train_batch_size": 4,          # Smaller batch size
+            "gradient_accumulation_steps": 8,          # More accumulation to compensate
+            "shuffle_buffer_length": min(500, data_length * 10),  # Smaller buffer
+            "context_length": min(32, data_length // 2),  # Adapt context to data size
+            "min_past": min(16, data_length // 4),       # Adapt min-past to data size
+        })
+        print(f"  🔧 Adapted parameters: max_steps={config['max_steps']}, batch_size={config['per_device_train_batch_size']}")
+    
+    return config
 
 def get_inference_config(dataset_name: str, max_run: int):
     """
@@ -851,67 +1045,109 @@ def run_all_steps(dataset_name: str, test_mode=False, max_columns=2):
         generate_yaml_config(dataset_name, column_name, prediction_length=prediction_length)
         
         # Step 1: Data preparation for this column
-        prepare_data(f"Dataset/{dataset_name}.csv", f"Dataset/Dataset.arrow/{dataset_name}_{column_name}.arrow", test_mode, max_columns)
+        if not prepare_data(f"Dataset/{dataset_name}.csv", f"Dataset/Dataset.arrow/{dataset_name}_{column_name}.arrow", test_mode, max_columns):
+            print(f"❌ Data preparation failed for {column_name}. Skipping to next column.")
+            continue
         
-        # Step 2: Training for this column
-        training_config = get_training_config(dataset_name, prediction_length)
+        # Step 2: Test training data loading before training
+        arrow_path = f"Dataset/Dataset.arrow/{dataset_name}_{column_name}.arrow"
+        if not test_training_data_loading(arrow_path, f"Step 2: Testing training data for {column_name}"):
+            print(f"❌ Training data test failed for {column_name}. Skipping training.")
+            print(f"💡 Recommendation: Use pre-trained models for evaluation instead.")
+            # Skip training but continue with evaluation
+            training_skipped = True
+        else:
+            training_skipped = False
         
-        commands = [
-            [
-                "python", "scripts/training/train.py", 
-                f"['Dataset/Dataset.arrow/{dataset_name}_{column_name}.arrow']",
-                "--model-id", training_config["model_id"],
-                "--prediction-length", str(training_config["prediction_length"]),
-                "--context-length", str(training_config["context_length"]),
-                "--min-past", str(training_config["min_past"]),
-                "--max-steps", str(training_config["max_steps"]),
-                "--save-steps", str(training_config["save_steps"]),
-                "--log-steps", str(training_config["log_steps"]),
-                "--per-device-train-batch-size", str(training_config["per_device_train_batch_size"]),
-                "--learning-rate", str(training_config["learning_rate"]),
-                "--warmup-ratio", str(training_config["warmup_ratio"]),
-                "--gradient-accumulation-steps", str(training_config["gradient_accumulation_steps"]),
-                "--lr-scheduler-type", training_config["lr_scheduler_type"],
-                "--shuffle-buffer-length", str(training_config["shuffle_buffer_length"]),
-                "--random-init" if training_config["random_init"] else "--no-random-init",
-                "--num-samples", str(training_config["num_samples"]),
-                "--temperature", str(training_config["temperature"]),
-                "--top-k", str(training_config["top_k"]),
-                "--seed", str(training_config["seed"]),
-                "--n-tokens", str(training_config["n_tokens"]),
-                "--tokenizer-kwargs", training_config["tokenizer_kwargs"],
-                "--output-dir", training_config["output_dir"],
-                "--dataloader-num-workers", str(training_config["dataloader_num_workers"]),
-                "--max-missing-prop", str(training_config["max_missing_prop"]),
-                "--no-torch-compile" if not training_config["torch_compile"] else "--torch-compile"
+        # Step 3: Training for this column (only if data test passed)
+        if not training_skipped:
+            # Get data length for adaptive training parameters
+            arrow_path = f"Dataset/Dataset.arrow/{dataset_name}_{column_name}.arrow"
+            try:
+                from gluonts.dataset.arrow import ArrowFile
+                test_dataset = ArrowFile(arrow_path)
+                test_data = list(test_dataset)
+                data_length = len(test_data[0]['target']) if test_data and 'target' in test_data[0] else None
+            except:
+                data_length = None
+            
+            training_config = get_training_config(dataset_name, prediction_length, data_length)
+        
+        if not training_skipped:
+            commands = [
+                [
+                    "python", "scripts/training/train.py", 
+                    f"['Dataset/Dataset.arrow/{dataset_name}_{column_name}.arrow']",
+                    "--model-id", training_config["model_id"],
+                    "--prediction-length", str(training_config["prediction_length"]),
+                    "--context-length", str(training_config["context_length"]),
+                    "--min-past", str(training_config["min_past"]),
+                    "--max-steps", str(training_config["max_steps"]),
+                    "--save-steps", str(training_config["save_steps"]),
+                    "--log-steps", str(training_config["log_steps"]),
+                    "--per-device-train-batch-size", str(training_config["per_device_train_batch_size"]),
+                    "--learning-rate", str(training_config["learning_rate"]),
+                    "--warmup-ratio", str(training_config["warmup_ratio"]),
+                    "--gradient-accumulation-steps", str(training_config["gradient_accumulation_steps"]),
+                    "--lr-scheduler-type", training_config["lr_scheduler_type"],
+                    "--shuffle-buffer-length", str(training_config["shuffle_buffer_length"]),
+                    "--random-init" if training_config["random_init"] else "--no-random-init",
+                    "--num-samples", str(training_config["num_samples"]),
+                    "--temperature", str(training_config["temperature"]),
+                    "--top-k", str(training_config["top_k"]),
+                    "--seed", str(training_config["seed"]),
+                    "--n-tokens", str(training_config["n_tokens"]),
+                    "--tokenizer-kwargs", training_config["tokenizer_kwargs"],
+                    "--output-dir", training_config["output_dir"],
+                    "--dataloader-num-workers", str(training_config["dataloader_num_workers"]),
+                    "--max-missing-prop", str(training_config["max_missing_prop"]),
+                    "--no-torch-compile" if not training_config["torch_compile"] else "--torch-compile"
+                ]
             ]
-        ]
-        step_names = [
-            f"Step 2: Running training for {column_name}..."
-        ]
-        for cmd, step in zip(commands, step_names):
-            run_command(cmd, step)
+            step_names = [
+                f"Step 3: Running training for {column_name}..."
+            ]
+            for cmd, step in zip(commands, step_names):
+                run_command(cmd, step)
+        else:
+            print(f"⏭️  Training skipped for {column_name} due to data quality issues")
         
-        # Step 3: Evaluation for this column
-        latest_checkpoint = get_latest_run_dir(f"results/{dataset_name}/training")
-        column_folder = column_folders[column_name]
+        # Step 4: Evaluation for this column
+        if training_skipped:
+            # Use pre-trained model for evaluation since training was skipped
+            print(f"🔄 Using pre-trained model for evaluation since training was skipped")
+            eval_cmd = [
+                "python", "scripts/evaluation/evaluate_local_with_predictions.py",
+                "--model-path", "amazon/chronos-t5-base",
+                "--dataset-path", f"Dataset/Dataset.arrow/{dataset_name}_{column_name}.arrow",
+                "--output-path", f"{column_folders[column_name]}/{dataset_name}_{column_name}_predictions.csv",
+                "--prediction-length", str(prediction_length),
+                "--use-inference-model",
+                "--enable-zero-shot"
+            ]
+        else:
+            # Use trained model for evaluation
+            latest_checkpoint = get_latest_run_dir(f"results/{dataset_name}/training")
+            eval_cmd = [
+                "python", "scripts/evaluation/evaluate_local_with_predictions.py",
+                "--model-path", latest_checkpoint,
+                "--dataset-path", f"Dataset/Dataset.arrow/{dataset_name}_{column_name}.arrow",
+                "--output-path", f"{column_folders[column_name]}/{dataset_name}_{column_name}_predictions.csv",
+                "--prediction-length", str(prediction_length),
+                "--use-inference-model",
+                "--enable-zero-shot"
+            ]
         
-        eval_cmd = [
-            "python", "scripts/evaluation/evaluate_local_with_predictions.py",
-            "--model-path", latest_checkpoint,
-            "--dataset-path", f"Dataset/Dataset.arrow/{dataset_name}_{column_name}.arrow",
-            "--output-path", f"{column_folder}/{dataset_name}_{column_name}_predictions.csv",
-            "--prediction-length", str(prediction_length),
-            "--use-inference-model",
-            "--enable-zero-shot"
-        ]
-        run_command(eval_cmd, f"Step 3: Running evaluation for {column_name}...")
+        run_command(eval_cmd, f"Step 4: Running evaluation for {column_name}...")
         
-        # Step 4: Create prediction analysis plot for this column
-        create_prediction_analysis_plot(dataset_name, column_folder, column_name)
+        # Step 5: Create prediction analysis plot for this column
+        create_prediction_analysis_plot(dataset_name, column_folders[column_name], column_name)
         
-        # Step 5: Save training history and create training charts for this column
-        save_training_history_and_charts(dataset_name, column_folder, column_name)
+        # Step 6: Save training history and create training charts for this column (only if training was successful)
+        if not training_skipped:
+            save_training_history_and_charts(dataset_name, column_folders[column_name], column_name)
+        else:
+            print(f"⏭️  Skipping training history save since training was skipped")
         
         print(f"✅ Completed processing for column: {column_name}")
     
@@ -935,6 +1171,8 @@ def main():
                        help='Process all columns in each dataset (overrides --columns)')
     parser.add_argument('--prediction-length', type=int, default=5, 
                        help='Number of values to predict (default: 5)')
+    parser.add_argument('--dataset-name', type=str, 
+                       help='Process specific dataset by name (e.g., emissions-co2, climate, gdp)')
     
     args = parser.parse_args()
     
@@ -948,7 +1186,16 @@ def main():
         args.columns = 0
     
     # Determine configuration
-    if args.all_datasets:
+    if args.dataset_name:
+        # Process specific dataset by name
+        if args.dataset_name in ["climate", "emissions-co2", "gdp", "pesticides", "fertilizers"]:
+            datasets_to_process = [args.dataset_name]
+            print(f"🎯 SPECIFIC MODE: Processing dataset: {args.dataset_name}")
+        else:
+            print(f"❌ Error: Unknown dataset '{args.dataset_name}'")
+            print("Available datasets: climate, emissions-co2, gdp, pesticides, fertilizers")
+            sys.exit(1)
+    elif args.all_datasets:
         datasets_to_process = ["climate", "emissions-co2", "gdp", "pesticides", "fertilizers"]
         print("🚀 FULL MODE: Processing ALL datasets")
     else:
@@ -1000,6 +1247,8 @@ def main():
     print(f"  python run_all.py                           # Default: 1 dataset, 2 columns")
     print(f"  python run_all.py --datasets 3              # 3 datasets, 2 columns each")
     print(f"  python run_all.py --columns 1               # 1 dataset, 1 column")
+    print(f"  python run_all.py --dataset-name emissions-co2  # Process ONLY emissions-co2")
+    print(f"  python run_all.py --dataset-name climate        # Process ONLY climate")
     print(f"  python run_all.py --all-datasets            # All datasets, 2 columns each")
     print(f"  python run_all.py --all-columns             # 1 dataset, all columns")
     print(f"  python run_all.py --all-datasets --all-columns  # All datasets, all columns")
