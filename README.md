@@ -18,6 +18,7 @@
 
 
 ## 🚀 News
+- **15 Aug 2025**: 🆕 Added `--column-name` parameter and enhanced CSV support! The `run_all.py` script now supports processing specific columns and automatically detects various CSV separators (comma, semicolon, tab, pipe, slash). Check out the [Advanced Usage section](#advanced-usage-with-custom-datasets) for examples.
 - **14 Feb 2025**: 🚀 Chronos-Bolt is now available on Amazon SageMaker JumpStart! Check out the [tutorial notebook](notebooks/deploy-chronos-bolt-to-amazon-sagemaker.ipynb) to learn how to deploy Chronos endpoints for production use in 3 lines of code.
 - **12 Dec 2024**: 📊 We released [`fev`](https://github.com/autogluon/fev), a lightweight package for benchmarking time series forecasting models based on the [Hugging Face `datasets`](https://huggingface.co/docs/datasets/en/index) library.
 - **26 Nov 2024**: ⚡️ Chronos-Bolt models released [on HuggingFace](https://huggingface.co/collections/amazon/chronos-models-65f1791d630a8d57cb718444). Chronos-Bolt models are more accurate (5% lower error), up to 250x faster and 20x more memory efficient than the original Chronos models of the same size!
@@ -180,6 +181,69 @@ embeddings, tokenizer_state = pipeline.embed(context)
 ### Pretraining, fine-tuning and evaluation
 
 Scripts for pretraining, fine-tuning and evaluating Chronos models can be found in [this folder](./scripts/).
+
+### Advanced Usage with Custom Datasets
+
+The `run_all.py` script provides advanced functionality for processing custom datasets with flexible column selection:
+
+#### Command Line Options
+
+```bash
+# Process a specific dataset with all columns
+python run_all.py --dataset-name gdp --all-columns
+
+# Process a specific dataset with limited columns
+python run_all.py --dataset-name climate --columns 2
+
+# Process a specific column from a dataset (NEW!)
+python run_all.py --dataset-name gdp --column-name germany_gdp
+
+# Process all datasets with all columns
+python run_all.py --all-datasets --all-columns
+
+# Custom prediction length
+python run_all.py --dataset-name emissions-co2 --column-name china_co2 --prediction-length 10
+```
+
+#### Supported Datasets
+
+- **`climate`** - Climate time series data
+- **`emissions-co2`** - CO2 emissions data
+- **`gdp`** - GDP time series data
+- **`pesticides`** - Pesticide usage data
+- **`fertilizers`** - Fertilizer consumption data
+
+#### CSV Format Support
+
+The script automatically detects and handles various CSV separators:
+- **Comma (`,`)** - Standard CSV format
+- **Semicolon (`;`)** - European CSV format
+- **Tab (`\t`)** - TSV format
+- **Pipe (`|`)** - Pipe-separated format
+- **Slash (`/`)** - Custom separator format
+
+#### Column-Specific Processing
+
+The new `--column-name` parameter allows you to:
+- Process only specific columns (e.g., `germany_gdp`, `usa_clima`, `china_co2`)
+- Save time by skipping irrelevant columns
+- Focus resources on specific time series of interest
+- Create organized folder structures for each column
+
+#### Example Workflow
+
+```bash
+# 1. Process only Germany GDP data
+python run_all.py --dataset-name gdp --column-name germany_gdp
+
+# 2. This will:
+#    - Read the GDP CSV with automatic separator detection
+#    - Create folder structure: results/gdp/germany_gdp/
+#    - Prepare data and convert to Arrow format
+#    - Train the Chronos model on Germany GDP data
+#    - Generate predictions and evaluation metrics
+#    - Create analysis plots and charts
+```
 
 ## :floppy_disk: Datasets
 
