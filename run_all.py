@@ -263,8 +263,41 @@ def create_dataset_column_folders(dataset_name: str, csv_path: str, test_mode=Fa
         csv_path: Path to the CSV file to read columns from
         test_mode: If True, only create folder for first column
     """
-    # Read CSV to get column names
-    df = pd.read_csv(csv_path)
+    # Try to read CSV with different separators
+    df = None
+    separators = [',', ';', '\t', '|', '/']
+    
+    for sep in separators:
+        try:
+            df = pd.read_csv(csv_path, sep=sep)
+            # Check if we got reasonable column names (not too long)
+            if len(df.columns) > 0 and all(len(str(col)) < 100 for col in df.columns):
+                print(f"✅ Successfully read CSV with separator: '{sep}'")
+                break
+        except Exception as e:
+            print(f"⚠️  Failed to read CSV with separator '{sep}': {e}")
+            continue
+    
+    if df is None or len(df.columns) == 0:
+        raise ValueError(f"Could not read CSV file {csv_path} with any of the separators: {separators}")
+    
+    # Clean column names to make them safe for folder names
+    safe_columns = []
+    for col in df.columns:
+        # Remove quotes and clean the column name
+        clean_col = str(col).strip().strip('"\'')
+        # Replace problematic characters
+        clean_col = clean_col.replace('/', '_').replace('\\', '_').replace(':', '_')
+        clean_col = clean_col.replace('*', '_').replace('?', '_').replace('<', '_').replace('>', '_')
+        clean_col = clean_col.replace('|', '_').replace(';', '_')
+        
+        # Limit length to avoid filesystem issues
+        if len(clean_col) > 50:
+            clean_col = clean_col[:47] + "..."
+        
+        safe_columns.append(clean_col)
+    
+    print(f"📁 Found {len(safe_columns)} columns: {safe_columns}")
     
     # Create main dataset folder
     dataset_folder = f"results/{dataset_name}"
@@ -275,25 +308,25 @@ def create_dataset_column_folders(dataset_name: str, csv_path: str, test_mode=Fa
     
     if test_mode:
         # Test mode: limited number of columns
-        if len(df.columns) > 0:
+        if len(safe_columns) > 0:
             if max_columns == 0:
                 # Process all columns
-                for col in df.columns:
+                for col in safe_columns:
                     column_folder = f"{dataset_folder}/{col}"
                     os.makedirs(column_folder, exist_ok=True)
                     column_folders[col] = column_folder
                 print(f"TEST MODE: Created folders for ALL columns: {len(column_folders)} columns")
             else:
                 # Process limited number of columns
-                for i in range(min(max_columns, len(df.columns))):
-                    col = df.columns[i]
+                for i in range(min(max_columns, len(safe_columns))):
+                    col = safe_columns[i]
                     column_folder = f"{dataset_folder}/{col}"
                     os.makedirs(column_folder, exist_ok=True)
                     column_folders[col] = column_folder
                 print(f"TEST MODE: Created folders for first {len(column_folders)} columns: {list(column_folders.keys())}")
     else:
         # Normal mode: all columns
-        for col in df.columns:
+        for col in safe_columns:
             column_folder = f"{dataset_folder}/{col}"
             os.makedirs(column_folder, exist_ok=True)
             column_folders[col] = column_folder
@@ -302,6 +335,84 @@ def create_dataset_column_folders(dataset_name: str, csv_path: str, test_mode=Fa
         print(f"Created organized folder structure for {dataset_name}:")
         for col, folder in column_folders.items():
             print(f"  - {folder}")
+    
+    return column_folders
+
+def create_dataset_column_folders_specific(dataset_name: str, csv_path: str, target_column: str):
+    """
+    Create organized folder structure for a specific column in a dataset.
+    
+    Args:
+        dataset_name: Name of the dataset
+        csv_path: Path to the CSV file to read columns from
+        target_column: Name of the specific column to process
+        
+    Returns:
+        dict: Dictionary mapping column names to folder paths (only the target column)
+    """
+    # Try to read CSV with different separators
+    df = None
+    separators = [',', ';', '\t', '|', '/']
+    
+    for sep in separators:
+        try:
+            df = pd.read_csv(csv_path, sep=sep)
+            # Check if we got reasonable column names (not too long)
+            if len(df.columns) > 0 and all(len(str(col)) < 100 for col in df.columns):
+                print(f"✅ Successfully read CSV with separator: '{sep}'")
+                break
+        except Exception as e:
+            print(f"⚠️  Failed to read CSV with separator '{sep}': {e}")
+            continue
+    
+    if df is None or len(df.columns) == 0:
+        raise ValueError(f"Could not read CSV file {csv_path} with any of the separators: {separators}")
+    
+    # Clean column names to make them safe for folder names
+    safe_columns = []
+    for col in df.columns:
+        # Remove quotes and clean the column name
+        clean_col = str(col).strip().strip('"\'')
+        # Replace problematic characters
+        clean_col = clean_col.replace('/', '_').replace('\\', '_').replace(':', '_')
+        clean_col = clean_col.replace('*', '_').replace('?', '_').replace('<', '_').replace('>', '_')
+        clean_col = clean_col.replace('|', '_').replace(';', '_')
+        
+        # Limit length to avoid filesystem issues
+        if len(clean_col) > 50:
+            clean_col = clean_col[:47] + "..."
+        
+        safe_columns.append(clean_col)
+    
+    print(f"📁 Found {len(safe_columns)} columns: {safe_columns}")
+    
+    # Check if target column exists
+    if target_column not in safe_columns:
+        # Try to find a close match
+        close_matches = [col for col in safe_columns if target_column.lower() in col.lower() or col.lower() in target_column.lower()]
+        if close_matches:
+            print(f"⚠️  Target column '{target_column}' not found, but found similar columns: {close_matches}")
+            print(f"💡 Using first match: {close_matches[0]}")
+            target_column = close_matches[0]
+        else:
+            print(f"❌ Target column '{target_column}' not found in available columns: {safe_columns}")
+            print(f"💡 Available columns: {safe_columns}")
+            raise ValueError(f"Target column '{target_column}' not found in dataset")
+    
+    print(f"🎯 Processing specific column: {target_column}")
+    
+    # Create main dataset folder
+    dataset_folder = f"results/{dataset_name}"
+    os.makedirs(dataset_folder, exist_ok=True)
+    
+    # Create folder only for the target column
+    column_folders = {}
+    column_folder = f"{dataset_folder}/{target_column}"
+    os.makedirs(column_folder, exist_ok=True)
+    column_folders[target_column] = column_folder
+    
+    print(f"Created folder structure for specific column {target_column}:")
+    print(f"  - {column_folder}")
     
     return column_folders
 
@@ -597,8 +708,21 @@ def create_prediction_analysis_plot(dataset_name: str, column_folder: str, colum
         
         print(f"📊 Creating prediction analysis plot for {dataset_name}_{column_name}...")
         
-        # Read the predictions data
-        df = pd.read_csv(predictions_file)
+        # Read the predictions data with automatic separator detection
+        df = None
+        separators = [',', ';', '\t', '|', '/']
+        
+        for sep in separators:
+            try:
+                df = pd.read_csv(predictions_file, sep=sep)
+                if len(df.columns) > 0:
+                    print(f"✅ Successfully read predictions CSV with separator: '{sep}'")
+                    break
+            except Exception as e:
+                continue
+        
+        if df is None or len(df.columns) == 0:
+            raise ValueError(f"Could not read predictions file {predictions_file}")
         
         # Convert timestamp to datetime
         df['timestamp'] = pd.to_datetime(df['timestamp'])
@@ -1029,10 +1153,17 @@ def get_inference_config(dataset_name: str, max_run: int):
         "note": "Inference parameters optimized for maximum prediction quality"
     }
 
-def run_all_steps(dataset_name: str, test_mode=False, max_columns=2):
+def run_all_steps(dataset_name: str, test_mode=False, max_columns=2, specific_column=None):
     # Create organized folder structure for this dataset
     csv_path = f"Dataset/{dataset_name}.csv"
-    column_folders = create_dataset_column_folders(dataset_name, csv_path, test_mode, max_columns)
+    
+    # Handle specific column mode
+    if specific_column:
+        # Create folder structure for specific column only
+        column_folders = create_dataset_column_folders_specific(dataset_name, csv_path, specific_column)
+    else:
+        # Normal mode
+        column_folders = create_dataset_column_folders(dataset_name, csv_path, test_mode, max_columns)
     
     # Set prediction length parameter
     prediction_length = 5
@@ -1173,6 +1304,8 @@ def main():
                        help='Number of values to predict (default: 5)')
     parser.add_argument('--dataset-name', type=str, 
                        help='Process specific dataset by name (e.g., emissions-co2, climate, gdp)')
+    parser.add_argument('--column-name', type=str, 
+                       help='Process specific column by name (e.g., germany_gdp, usa_clima, china_co2)')
     
     args = parser.parse_args()
     
@@ -1202,12 +1335,20 @@ def main():
         datasets_to_process = ["climate", "emissions-co2", "gdp", "pesticides", "fertilizers"][:args.datasets]
         print(f"📊 LIMITED MODE: Processing {len(datasets_to_process)} dataset(s)")
     
-    if args.all_columns:
+    # Handle column configuration
+    if args.column_name:
+        # Process specific column
+        print(f"🎯 COLUMN-SPECIFIC MODE: Processing column: {args.column_name}")
+        columns_per_dataset = 0  # Will be handled specially in run_all_steps
+        specific_column_mode = True
+    elif args.all_columns:
         columns_per_dataset = 0
         print("📈 Processing ALL columns in each dataset")
+        specific_column_mode = False
     else:
         columns_per_dataset = args.columns
         print(f"📈 Processing {columns_per_dataset} column(s) per dataset")
+        specific_column_mode = False
     
     print(f"🎯 Prediction length: {args.prediction_length}")
     print(f"📊 Available datasets: {len(['climate', 'emissions-co2', 'gdp', 'pesticides', 'fertilizers'])}")
@@ -1222,9 +1363,16 @@ def main():
         print("-" * 50)
         
         # Set test_mode based on column configuration
-        test_mode = columns_per_dataset > 0  # True if limited columns, False if all columns
+        if args.column_name:
+            # Specific column mode
+            test_mode = False
+            specific_column = args.column_name
+        else:
+            # Normal mode
+            test_mode = columns_per_dataset > 0  # True if limited columns, False if all columns
+            specific_column = None
         
-        run_all_steps(dataset_name, test_mode=test_mode, max_columns=columns_per_dataset)
+        run_all_steps(dataset_name, test_mode=test_mode, max_columns=columns_per_dataset, specific_column=specific_column)
         
         # Break if we've processed the requested number of datasets
         if not args.all_datasets and i >= args.datasets:
@@ -1249,6 +1397,7 @@ def main():
     print(f"  python run_all.py --columns 1               # 1 dataset, 1 column")
     print(f"  python run_all.py --dataset-name emissions-co2  # Process ONLY emissions-co2")
     print(f"  python run_all.py --dataset-name climate        # Process ONLY climate")
+    print(f"  python run_all.py --dataset-name gdp --column-name germany_gdp  # Process ONLY germany_gdp column")
     print(f"  python run_all.py --all-datasets            # All datasets, 2 columns each")
     print(f"  python run_all.py --all-columns             # 1 dataset, all columns")
     print(f"  python run_all.py --all-datasets --all-columns  # All datasets, all columns")

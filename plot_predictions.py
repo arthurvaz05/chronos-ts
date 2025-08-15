@@ -16,8 +16,21 @@ def plot_predictions(predictions_file):
     Args:
         predictions_file: Path to the predictions CSV file
     """
-    # Read the predictions data
-    df = pd.read_csv(predictions_file)
+    # Read the predictions data with automatic separator detection
+    df = None
+    separators = [',', ';', '\t', '|', '/']
+    
+    for sep in separators:
+        try:
+            df = pd.read_csv(predictions_file, sep=sep)
+            if len(df.columns) > 0:
+                print(f"✅ Successfully read predictions CSV with separator: '{sep}'")
+                break
+        except Exception as e:
+            continue
+    
+    if df is None or len(df.columns) == 0:
+        raise ValueError(f"Could not read predictions file {predictions_file}")
     
     # Convert timestamp to datetime
     df['timestamp'] = pd.to_datetime(df['timestamp'])

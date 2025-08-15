@@ -19,8 +19,23 @@ def read_transform_data(csv_path: Union[str, Path], test_mode: bool = False, max
     Returns:
         List of numpy arrays, each representing a time series
     """
-    # Read the CSV file
-    df = pd.read_csv(csv_path)
+    # Try to read CSV with different separators
+    df = None
+    separators = [',', ';', '\t', '|', '/']
+    
+    for sep in separators:
+        try:
+            df = pd.read_csv(csv_path, sep=sep)
+            # Check if we got reasonable column names (not too long)
+            if len(df.columns) > 0 and all(len(str(col)) < 100 for col in df.columns):
+                print(f"✅ Successfully read CSV with separator: '{sep}'")
+                break
+        except Exception as e:
+            print(f"⚠️  Failed to read CSV with separator '{sep}': {e}")
+            continue
+    
+    if df is None or len(df.columns) == 0:
+        raise ValueError(f"Could not read CSV file {csv_path} with any of the separators: {separators}")
     
     # Convert to time series format
     # Each column becomes a time series
