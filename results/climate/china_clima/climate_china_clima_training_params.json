@@ -26,6 +26,6 @@
   "torch_compile": false,
   "output_dir": "results/climate/training",
   "top_p": 0.9,
-  "training_run": "run-29",
-  "timestamp": "2025-08-13T16:53:32.810871"
+  "training_run": "run-3",
+  "timestamp": "2025-08-13T23:15:12.357348"
 }

@@ -11,8 +11,8 @@
   "repetition_penalty": 1.2,
   "length_penalty": 1.1,
   "seed": 42,
-  "inference_run": "inference-29",
-  "timestamp": "2025-08-13T16:53:32.811154",
+  "inference_run": "inference-3",
+  "timestamp": "2025-08-13T23:15:12.357543",
   "note": "Inference parameters optimized for maximum prediction quality",
   "column_name": "china_clima"
 }

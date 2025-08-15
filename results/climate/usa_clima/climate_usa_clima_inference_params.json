@@ -11,8 +11,8 @@
   "repetition_penalty": 1.2,
   "length_penalty": 1.1,
   "seed": 42,
-  "inference_run": "inference-28",
-  "timestamp": "2025-08-13T16:34:46.523727",
+  "inference_run": "inference-2",
+  "timestamp": "2025-08-13T21:12:52.314553",
   "note": "Inference parameters optimized for maximum prediction quality",
   "column_name": "usa_clima"
 }
