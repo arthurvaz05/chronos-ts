@@ -69,6 +69,50 @@ def read_transform_data(csv_path: Union[str, Path], test_mode: bool = False, max
     return time_series
 
 
+def read_transform_data_single_column(csv_path: Union[str, Path], column_name: str) -> List[np.ndarray]:
+    """
+    Read CSV data and transform it into time series format for a single specific column.
+    
+    Args:
+        csv_path: Path to the CSV file
+        column_name: Name of the specific column to process
+        
+    Returns:
+        List containing a single numpy array representing the time series for the specified column
+    """
+    # Try to read CSV with different separators
+    df = None
+    separators = [',', ';', '\t', '|', '/']
+    
+    for sep in separators:
+        try:
+            df = pd.read_csv(csv_path, sep=sep)
+            # Check if we got reasonable column names (not too long)
+            if len(df.columns) > 0 and all(len(str(col)) < 100 for col in df.columns):
+                print(f"✅ Successfully read CSV with separator: '{sep}'")
+                break
+        except Exception as e:
+            print(f"⚠️  Failed to read CSV with separator '{sep}': {e}")
+            continue
+    
+    if df is None or len(df.columns) == 0:
+        raise ValueError(f"Could not read CSV file {csv_path} with any of the separators: {separators}")
+    
+    # Check if the specified column exists
+    if column_name not in df.columns:
+        raise ValueError(f"Column '{column_name}' not found in CSV file. Available columns: {list(df.columns)}")
+    
+    # Process only the specified column
+    series = df[column_name].dropna().values
+    if len(series) == 0:
+        raise ValueError(f"Column '{column_name}' contains no valid data (all NaN values)")
+    
+    time_series = [series.astype(np.float32)]
+    print(f"📊 Processing single column: {column_name} with {len(series)} data points")
+    
+    return time_series
+
+
 def convert_to_arrow(
     path: Union[str, Path],
     time_series: Union[List[np.ndarray], np.ndarray],
