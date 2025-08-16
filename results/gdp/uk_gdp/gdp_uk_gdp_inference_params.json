@@ -1,0 +1,18 @@
+{
+  "dataset_name": "gdp",
+  "model_id": "amazon/chronos-t5-large",
+  "prediction_length": 5,
+  "context_length": 256,
+  "min_past": 128,
+  "num_samples": 30,
+  "temperature": 0.6,
+  "top_k": 10,
+  "top_p": 0.85,
+  "repetition_penalty": 1.2,
+  "length_penalty": 1.1,
+  "seed": 42,
+  "inference_run": "inference-13",
+  "timestamp": "2025-08-16T19:28:01.304548",
+  "note": "Inference parameters optimized for maximum prediction quality",
+  "column_name": "uk_gdp"
+}
