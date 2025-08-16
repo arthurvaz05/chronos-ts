@@ -181,16 +181,109 @@ def get_latest_run_dir(output_dir="output"):
         raise RuntimeError("No run-N directories found in output directory.")
     return f"{output_dir}/run-{max_run}/checkpoint-final"
 
+def extract_timing_from_training_output(output_text):
+    """
+    Extract timing information from training console output.
+    
+    Args:
+        output_text (str): Console output text from training
+        
+    Returns:
+        dict: Dictionary containing timing information or None if not found
+    """
+    import re
+    
+    # Look for the final training summary line
+    # Pattern: {'train_runtime': 337.521, 'train_samples_per_second': 31.287, 'train_steps_per_second': 0.978, 'train_loss': 2.124661821307558, 'epoch': 1.0}
+    pattern = r"\{'train_runtime': ([0-9.]+), 'train_samples_per_second': ([0-9.]+), 'train_steps_per_second': ([0-9.]+), 'train_loss': ([0-9.]+), 'epoch': ([0-9.]+)\}"
+    
+    match = re.search(pattern, output_text)
+    if match:
+        timing_info = {
+            'train_runtime': float(match.group(1)),
+            'train_samples_per_second': float(match.group(2)),
+            'train_steps_per_second': float(match.group(3)),
+            'train_loss': float(match.group(4)),
+            'epoch': float(match.group(5))
+        }
+        
+        # Extract step information from the final checkpoint
+        # Look for the final step in the log history
+        step_pattern = r"'step': ([0-9]+)"
+        step_match = re.search(step_pattern, output_text)
+        if step_match:
+            timing_info['step'] = int(step_match.group(1))
+            print(f"🔍 Debug: Found step with pattern 1: {timing_info['step']}")
+        else:
+            # Try alternative pattern
+            step_pattern2 = r"step': ([0-9]+)"
+            step_match2 = re.search(step_pattern2, output_text)
+            if step_match2:
+                timing_info['step'] = int(step_match2.group(1))
+                print(f"🔍 Debug: Found step with pattern 2: {timing_info['step']}")
+            else:
+                # If no step found, use the max_steps from training config (usually 330)
+                timing_info['step'] = 330
+                print(f"🔍 Debug: Using default step: {timing_info['step']}")
+        
+        return timing_info
+    
+    return None
+
+def save_timing_info_to_file(training_run_dir, timing_info):
+    """
+    Save timing information to a JSON file in the training run directory.
+    
+    Args:
+        training_run_dir (str): Path to the training run directory
+        timing_info (dict): Dictionary containing timing information
+    """
+    if not timing_info:
+        return
+    
+    timing_file = os.path.join(training_run_dir, "timing_info.json")
+    
+    try:
+        with open(timing_file, 'w') as f:
+            json.dump(timing_info, f, indent=2)
+        print(f"✅ Timing information saved to: {timing_file}")
+        print(f"   Content: {timing_info}")
+    except Exception as e:
+        print(f"❌ Error saving timing information: {e}")
+
 def run_command(cmd, step_name):
     """
     Runs a shell command and handles errors.
     """
     print(f"{step_name}")
-    result = subprocess.run(cmd)
-    if result.returncode != 0:
-        print(f"{step_name} failed. Exiting.")
-        sys.exit(result.returncode)
-    print(f"{step_name} completed successfully.\n")
+    
+    # Capture output for training commands to extract timing information
+    if "train.py" in str(cmd):
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"{step_name} failed. Exiting.")
+            print(f"Error output: {result.stderr}")
+            sys.exit(result.returncode)
+        
+        # Extract timing information from training output
+        timing_info = extract_timing_from_training_output(result.stdout)
+        if timing_info:
+            # Save timing info to the training run directory
+            # Find the latest training run directory for the current dataset
+            import glob
+            training_dirs = glob.glob("results/*/training/run-*")
+            if training_dirs:
+                # Sort by creation time and get the latest
+                latest_run_dir = max(training_dirs, key=os.path.getctime)
+                save_timing_info_to_file(latest_run_dir, timing_info)
+        
+        print(f"{step_name} completed successfully.\n")
+    else:
+        result = subprocess.run(cmd)
+        if result.returncode != 0:
+            print(f"{step_name} failed. Exiting.")
+            sys.exit(result.returncode)
+        print(f"{step_name} completed successfully.\n")
 
 def test_training_data_loading(arrow_path, step_name):
     """
@@ -686,19 +779,18 @@ def create_training_summary_chart(dataset_name: str, training_run_dir: str, colu
     try:
         # Create a summary visualization
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 10))
-        fig.suptitle(f'Training Summary for {dataset_name} - {column_name}', fontsize=16, fontweight='bold')
         
-        # Chart 1: Actual Training Loss Progression (from logs)
+        # Initialize log_file variable
+        log_file = None
+        
+        # Get timing information for the title
+        timing_info = ""
         try:
-            # Try to read actual training logs from checkpoint directories
-            log_file = None
             # Look for trainer_state.json in checkpoint directories
-            # We want the final training step, not checkpoint-final
             checkpoint_dirs = [d for d in os.listdir(training_run_dir) if d.startswith('checkpoint-') and d != 'checkpoint-final']
             
             # Extract step numbers and find the highest step
             max_step = 0
-            log_file = None
             
             for checkpoint_dir in checkpoint_dirs:
                 try:
@@ -712,8 +804,27 @@ def create_training_summary_chart(dataset_name: str, training_run_dir: str, colu
                 except:
                     continue
             
+            if log_file and os.path.exists(log_file):
+                with open(log_file, 'r') as f:
+                    trainer_state = json.load(f)
+                
+                if 'log_history' in trainer_state and trainer_state['log_history']:
+                    last_log = trainer_state['log_history'][-1]
+                    if 'train_runtime' in last_log:
+                        runtime = last_log['train_runtime']
+                        minutes = int(runtime // 60)
+                        seconds = int(runtime % 60)
+                        timing_info = f" (Runtime: {minutes}m {seconds}s)"
+        except Exception as e:
+            print(f"  ⚠️  Could not get timing info for title: {e}")
+            pass
+        
+        fig.suptitle(f'Training Summary for {dataset_name} - {column_name}{timing_info}', fontsize=16, fontweight='bold')
+        
+        # Chart 1: Actual Training Loss Progression (from logs)
+        try:
             if log_file:
-                print(f"  📊 Reading training logs from: checkpoint-{max_step} (final training step)")
+                print(f"  📊 Reading training logs from: {os.path.basename(os.path.dirname(log_file))} (final training step)")
             else:
                 print(f"  ⚠️  No trainer_state.json found in checkpoints")
             
@@ -741,8 +852,19 @@ def create_training_summary_chart(dataset_name: str, training_run_dir: str, colu
                                     arrowprops=dict(arrowstyle='->', color='red'),
                                     fontsize=10, color='red', fontweight='bold')
                         
+
+                        
                         print(f"  📊 Actual training loss progression loaded from {os.path.basename(log_file)}")
                         print(f"     Final loss: {final_loss:.3f}")
+                        
+                        # Print timing information if available
+                        if 'train_runtime' in log_history[-1]:
+                            runtime = log_history[-1]['train_runtime']
+                            minutes = int(runtime // 60)
+                            seconds = int(runtime % 60)
+                            print(f"     Training time: {minutes}m {seconds}s")
+                        if 'train_steps_per_second' in log_history[-1]:
+                            print(f"     Training speed: {log_history[-1]['train_steps_per_second']:.2f} steps/sec")
                     else:
                         raise ValueError("No loss data in log history")
                 else:
@@ -779,6 +901,64 @@ def create_training_summary_chart(dataset_name: str, training_run_dir: str, colu
         ax2.set_ylabel('Learning Rate')
         ax2.grid(True, alpha=0.3)
         
+        # Add timing information box to the learning rate chart
+        try:
+            # Try to read timing info from a separate file first
+            timing_info_file = os.path.join(training_run_dir, "timing_info.json")
+            timing_text = ""
+            
+            if os.path.exists(timing_info_file):
+                with open(timing_info_file, 'r') as f:
+                    timing_data = json.load(f)
+                
+                if 'train_runtime' in timing_data:
+                    runtime = timing_data['train_runtime']
+                    minutes = int(runtime // 60)
+                    seconds = int(runtime % 60)
+                    timing_text += f"Training Time: {minutes}m {seconds}s\n"
+                
+                if 'train_steps_per_second' in timing_data:
+                    speed = timing_data['train_steps_per_second']
+                    timing_text += f"Speed: {speed:.2f} steps/sec\n"
+                
+                if 'step' in timing_data:
+                    timing_text += f"Steps: {timing_data['step']}"
+            
+            # Fallback to trainer_state.json if timing_info.json doesn't exist
+            elif log_file and os.path.exists(log_file):
+                with open(log_file, 'r') as f:
+                    trainer_state = json.load(f)
+                
+                if 'log_history' in trainer_state and trainer_state['log_history']:
+                    last_log = trainer_state['log_history'][-1]
+                    
+                    # Create timing information text
+                    if 'train_runtime' in last_log:
+                        runtime = last_log['train_runtime']
+                        minutes = int(runtime // 60)
+                        seconds = int(runtime % 60)
+                        timing_text += f"Training Time: {minutes}m {seconds}s\n"
+                    
+                    if 'train_steps_per_second' in last_log:
+                        speed = last_log['train_steps_per_second']
+                        timing_text += f"Speed: {speed:.2f} steps/sec\n"
+                    
+                    if 'step' in last_log:
+                        timing_text += f"Steps: {last_log['step']}"
+            
+            # Add timing box to the chart
+            if timing_text:
+                ax2.text(0.02, 0.98, timing_text, 
+                        transform=ax2.transAxes, fontsize=9, 
+                        verticalalignment='top', fontfamily='monospace',
+                        bbox=dict(boxstyle="round,pad=0.4", 
+                        facecolor="lightblue", alpha=0.8, 
+                        edgecolor="navy", linewidth=1))
+        except Exception as e:
+            print(f"  ⚠️  Could not add timing box to learning rate chart: {e}")
+        
+
+        
         # Chart 3: Actual Gradient Norm Progression (if available) or Expected
         try:
             if log_file and os.path.exists(log_file):
@@ -805,7 +985,18 @@ def create_training_summary_chart(dataset_name: str, training_run_dir: str, colu
                                     arrowprops=dict(arrowstyle='->', color='red'),
                                     fontsize=10, color='red', fontweight='bold')
                         
+
+                        
                         print(f"     Final gradient norm: {final_grad_norm:.3f}")
+                        
+                        # Print timing information if available
+                        if 'train_runtime' in log_history[-1]:
+                            runtime = log_history[-1]['train_runtime']
+                            minutes = int(runtime // 60)
+                            seconds = int(runtime % 60)
+                            print(f"     Training time: {minutes}m {seconds}s")
+                        if 'train_steps_per_second' in log_history[-1]:
+                            print(f"     Training speed: {log_history[-1]['train_steps_per_second']:.2f} steps/sec")
                     else:
                         raise ValueError("No gradient norm data in log history")
                 else:
@@ -824,6 +1015,68 @@ def create_training_summary_chart(dataset_name: str, training_run_dir: str, colu
         
         # Chart 4: Training Configuration Summary (from our actual configuration)
         training_config = get_training_config(dataset_name, 5)
+        
+        # Calculate training time from timing_info.json or trainer_state.json if available
+        training_time = "N/A"
+        total_steps = "N/A"
+        steps_per_second = "N/A"
+        
+        try:
+            # Try to read timing info from a separate file first
+            timing_info_file = os.path.join(training_run_dir, "timing_info.json")
+            print(f"  🔍 Debug: training_run_dir = {training_run_dir}")
+            print(f"  🔍 Debug: timing_info_file = {timing_info_file}")
+            print(f"  🔍 Debug: timing_info_file exists = {os.path.exists(timing_info_file)}")
+            
+            if os.path.exists(timing_info_file):
+                print(f"  🔍 Debug: Reading timing_info.json from {timing_info_file}")
+                with open(timing_info_file, 'r') as f:
+                    timing_data = json.load(f)
+                
+                print(f"  🔍 Debug: timing_data keys = {list(timing_data.keys())}")
+                
+                if 'train_runtime' in timing_data:
+                    training_time = f"{timing_data['train_runtime']:.1f}s"
+                    print(f"  🔍 Debug: Found train_runtime = {timing_data['train_runtime']}")
+                if 'step' in timing_data:
+                    total_steps = str(timing_data['step'])
+                    print(f"  🔍 Debug: Found step = {timing_data['step']}")
+                if 'train_steps_per_second' in timing_data:
+                    steps_per_second = f"{timing_data['train_steps_per_second']:.2f}"
+                    print(f"  🔍 Debug: Found train_steps_per_second = {timing_data['train_steps_per_second']}")
+            
+            # Fallback to trainer_state.json if timing_info.json doesn't exist
+            elif log_file and os.path.exists(log_file):
+                print(f"  🔍 Debug: Reading trainer_state.json from {log_file}")
+                with open(log_file, 'r') as f:
+                    trainer_state = json.load(f)
+                
+                print(f"  🔍 Debug: trainer_state keys = {list(trainer_state.keys())}")
+                
+                if 'log_history' in trainer_state and trainer_state['log_history']:
+                    print(f"  🔍 Debug: log_history length = {len(trainer_state['log_history'])}")
+                    # Get training time from the last log entry
+                    last_log = trainer_state['log_history'][-1]
+                    print(f"  🔍 Debug: last_log keys = {list(last_log.keys())}")
+                    
+                    if 'train_runtime' in last_log:
+                        training_time = f"{last_log['train_runtime']:.1f}s"
+                        print(f"  🔍 Debug: Found train_runtime = {last_log['train_runtime']}")
+                    if 'step' in last_log:
+                        total_steps = str(last_log['step'])
+                        print(f"  🔍 Debug: Found step = {last_log['step']}")
+                    if 'train_steps_per_second' in last_log:
+                        steps_per_second = f"{last_log['train_steps_per_second']:.2f}"
+                        print(f"  🔍 Debug: Found train_steps_per_second = {last_log['train_steps_per_second']}")
+                else:
+                    print(f"  🔍 Debug: No log_history found in trainer_state")
+            else:
+                print(f"  🔍 Debug: Neither timing_info.json nor trainer_state.json found")
+        except Exception as e:
+            print(f"  ⚠️  Could not extract timing information: {e}")
+            import traceback
+            traceback.print_exc()
+        
         config_text = f"""
 Training Configuration:
 • Model: {training_config['model_id'].split('/')[-1]}
@@ -835,6 +1088,12 @@ Training Configuration:
 • Prediction Length: {training_config['prediction_length']}
 • Learning Rate: {training_config['learning_rate']}
 • Training Run: {os.path.basename(training_run_dir)}
+
+Training Performance:
+• Total Steps Completed: {total_steps}
+• Training Time: {training_time}
+• Steps per Second: {steps_per_second}
+• Efficiency: {f'{float(steps_per_second):.2f} steps/sec' if steps_per_second != 'N/A' else 'N/A'}
         """
         ax4.text(0.1, 0.5, config_text, transform=ax4.transAxes, fontsize=12, 
                 verticalalignment='center', fontfamily='monospace',
