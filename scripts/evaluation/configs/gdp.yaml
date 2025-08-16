@@ -1,0 +1,5 @@
+- name: gdp
+  dataset_path: Dataset/Dataset.arrow/gdp_italy_gdp.arrow
+  offset: -5
+  prediction_length: 5
+  num_rolls: 1
