@@ -143,17 +143,19 @@ def convert_to_arrow(
 
 
 if __name__ == "__main__":
-    # Generate 20 random time series of length 1024
-    time_series = [np.random.randn(1024) for i in range(1)]
+    # This block is commented out to prevent freezing when imported
+    pass
+    # # Generate 20 random time series of length 1024
+    # time_series = [np.random.randn(1024) for i in range(1)]
     
-    # Save the time series to a file csv
-    df = pd.DataFrame(time_series).T
-    df.to_csv("./scripts/noise-data.csv", index=False)
-    print(df.shape)
-    print(df.head().T)
-    # Convert to GluonTS arrow format
-    convert_to_arrow("./scripts/noise-data.arrow", time_series=time_series)
+    # # Save the time series to a file csv
+    # df = pd.DataFrame(time_series).T
+    # df.to_csv("./scripts/noise-data.csv", index=False)
+    # print(df.shape)
+    # print(df.head().T)
+    # # Convert to GluonTS arrow format
+    # convert_to_arrow("./scripts/noise-data.arrow", time_series=time_series)
 
 
-    # run the training script
-    # python scripts/training/train.py --config scripts/training/configs/chronos-t5-tiny.yaml   
+    # # run the training script
+    # # python scripts/training/train.py --config scripts/training/configs/chronos-t5-tiny.yaml   
