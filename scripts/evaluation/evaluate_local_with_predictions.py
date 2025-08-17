@@ -10,6 +10,8 @@ import os
 import pandas as pd
 import numpy as np
 import torch
+import sys
+sys.path.append('src')
 from chronos import ChronosPipeline
 from gluonts.dataset.arrow import ArrowFile
 from gluonts.dataset.common import ListDataset

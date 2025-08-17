@@ -18,6 +18,8 @@
 
 
 ## 🚀 News
+- **16 Aug 2025**: 🆕 Added `--columns-names` parameter for multi-column processing! The `run_all.py` script now supports processing multiple specific columns with comma-separated lists and dash-separated ranges (e.g., `"brazil_gdp,canada_gdp"` or `"brazil_gdp-canada_gdp"`). Check out the [Advanced Usage section](#advanced-usage-with-custom-datasets) for examples.
+- **15 Aug 2025**: 🆕 Added `--column-name` parameter and enhanced CSV support! The `run_all.py` script now supports processing specific columns and automatically detects various CSV separators (comma, semicolon, tab, pipe, slash).
 - **14 Feb 2025**: 🚀 Chronos-Bolt is now available on Amazon SageMaker JumpStart! Check out the [tutorial notebook](notebooks/deploy-chronos-bolt-to-amazon-sagemaker.ipynb) to learn how to deploy Chronos endpoints for production use in 3 lines of code.
 - **12 Dec 2024**: 📊 We released [`fev`](https://github.com/autogluon/fev), a lightweight package for benchmarking time series forecasting models based on the [Hugging Face `datasets`](https://huggingface.co/docs/datasets/en/index) library.
 - **26 Nov 2024**: ⚡️ Chronos-Bolt models released [on HuggingFace](https://huggingface.co/collections/amazon/chronos-models-65f1791d630a8d57cb718444). Chronos-Bolt models are more accurate (5% lower error), up to 250x faster and 20x more memory efficient than the original Chronos models of the same size!
@@ -180,6 +182,124 @@ embeddings, tokenizer_state = pipeline.embed(context)
 ### Pretraining, fine-tuning and evaluation
 
 Scripts for pretraining, fine-tuning and evaluating Chronos models can be found in [this folder](./scripts/).
+
+### Advanced Usage with Custom Datasets
+
+The `run_all.py` script provides advanced functionality for processing custom datasets with flexible column selection:
+
+#### Command Line Options
+
+```bash
+# Process a specific dataset with all columns
+python run_all.py --dataset-name gdp --all-columns
+
+# Process a specific dataset with limited columns
+python run_all.py --dataset-name climate --columns 2
+
+# Process a specific column from a dataset
+python run_all.py --dataset-name gdp --column-name germany_gdp
+
+# Process multiple specific columns (NEW!)
+python run_all.py --dataset-name gdp --columns-names "brazil_gdp,canada_gdp"
+
+# Process columns in a range (NEW!)
+python run_all.py --dataset-name gdp --columns-names "brazil_gdp-canada_gdp"
+
+# Process all datasets with all columns
+python run_all.py --all-datasets --all-columns
+
+# Custom prediction length
+python run_all.py --dataset-name emissions-co2 --column-name china_co2 --prediction-length 10
+```
+
+#### Supported Datasets
+
+- **`climate`** - Climate time series data
+- **`emissions-co2`** - CO2 emissions data
+- **`gdp`** - GDP time series data
+- **`pesticides`** - Pesticide usage data
+- **`fertilizers`** - Fertilizer consumption data
+
+#### CSV Format Support
+
+The script automatically detects and handles various CSV separators:
+- **Comma (`,`)** - Standard CSV format
+- **Semicolon (`;`)** - European CSV format
+- **Tab (`\t`)** - TSV format
+- **Pipe (`|`)** - Pipe-separated format
+- **Slash (`/`)** - Custom separator format
+
+#### Column-Specific Processing
+
+The `--column-name` parameter allows you to:
+- Process only specific columns (e.g., `germany_gdp`, `usa_clima`, `china_co2`)
+- Save time by skipping irrelevant columns
+- Focus resources on specific time series of interest
+- Create organized folder structures for each column
+
+#### Multi-Column Processing (NEW!)
+
+The new `--columns-names` parameter provides advanced column selection:
+
+**Comma-Separated Lists:**
+```bash
+# Process specific columns by name
+python run_all.py --dataset-name gdp --columns-names "brazil_gdp,canada_gdp,china_gdp"
+```
+
+**Dash-Separated Ranges:**
+```bash
+# Process all columns between start and end (inclusive)
+python run_all.py --dataset-name gdp --columns-names "brazil_gdp-canada_gdp"
+# This will process: brazil_gdp, italy_gdp, canada_gdp
+```
+
+**Mixed Format:**
+```bash
+# Combine specific columns and ranges
+python run_all.py --dataset-name gdp --columns-names "brazil_gdp,china_gdp-france_gdp"
+# This will process: brazil_gdp, china_gdp, germany_gdp, japan_gdp, india_gdp, uk_gdp, france_gdp
+```
+
+**Benefits:**
+- **Flexible selection**: Choose exactly which columns to process
+- **Range support**: Process consecutive columns easily
+- **Efficient processing**: Only process the columns you need
+- **Organized results**: Each column gets its own folder structure
+
+#### Example Workflows
+
+**Single Column Processing:**
+```bash
+# 1. Process only Germany GDP data
+python run_all.py --dataset-name gdp --column-name germany_gdp
+
+# 2. This will:
+#    - Read the GDP CSV with automatic separator detection
+#    - Create folder structure: results/gdp/germany_gdp/
+#    - Prepare data and convert to Arrow format
+#    - Train the Chronos model on Germany GDP data
+#    - Generate predictions and evaluation metrics
+#    - Create analysis plots and charts
+```
+
+**Multi-Column Processing:**
+```bash
+# 1. Process multiple specific GDP columns
+python run_all.py --dataset-name gdp --columns-names "brazil_gdp,canada_gdp,china_gdp"
+
+# 2. This will:
+#    - Read the GDP CSV with automatic separator detection
+#    - Create folder structures: results/gdp/brazil_gdp/, results/gdp/canada_gdp/, results/gdp/china_gdp/
+#    - Prepare data for each column individually
+#    - Train separate Chronos models for each country's GDP data
+#    - Generate predictions and evaluation metrics for each column
+#    - Create analysis plots and charts for each column
+
+# 3. Process a range of columns
+python run_all.py --dataset-name gdp --columns-names "brazil_gdp-canada_gdp"
+# This processes: brazil_gdp, italy_gdp, canada_gdp
+```
 
 ## :floppy_disk: Datasets
 
