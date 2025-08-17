@@ -38,6 +38,90 @@ cd chronos-forecasting
 pip install --editable ".[training,evaluation]"
 ```
 
+## 🚀 Advanced Dataset Processing with run_all.py
+
+The `run_all.py` script provides comprehensive functionality for processing custom datasets with flexible column selection and multi-column processing capabilities.
+
+### Multi-Column Processing (NEW!)
+
+The new `--columns-names` parameter allows you to process multiple specific columns efficiently:
+
+#### **Comma-Separated Column Lists**
+```bash
+# Process specific columns by name
+python run_all.py --dataset-name gdp --columns-names "brazil_gdp,canada_gdp,china_gdp"
+
+# Process specific columns from any dataset
+python run_all.py --dataset-name fertilizers --columns-names "brazil_n,canada_p2o5,usa_k2o"
+```
+
+#### **Dash-Separated Column Ranges**
+```bash
+# Process all columns between start and end (inclusive)
+python run_all.py --dataset-name gdp --columns-names "brazil_gdp-canada_gdp"
+# This will process: brazil_gdp, italy_gdp, canada_gdp
+
+# Process a range of fertilizer columns
+python run_all.py --dataset-name fertilizers --columns-names "brazil_n-usa_p2o5"
+```
+
+#### **Mixed Format Support**
+```bash
+# Combine specific columns and ranges
+python run_all.py --dataset-name gdp --columns-names "brazil_gdp,china_gdp-france_gdp"
+# This will process: brazil_gdp, china_gdp, germany_gdp, japan_gdp, india_gdp, uk_gdp, france_gdp
+```
+
+#### **Benefits of Multi-Column Processing**
+- **Flexible Selection**: Choose exactly which columns to process
+- **Range Support**: Process consecutive columns easily with dash notation
+- **Efficient Processing**: Only process the columns you need
+- **Organized Results**: Each column gets its own folder structure
+- **Individual Data**: Each column gets unique data (fixes previous duplication issues)
+- **Parallel Processing**: Process multiple columns in sequence
+
+### Single Column Processing
+
+For processing individual columns:
+
+```bash
+# Process a specific column
+python run_all.py --dataset-name gdp --column-name germany_gdp
+
+# Process with custom prediction length
+python run_all.py --dataset-name climate --column-name usa_clima --prediction-length 10
+```
+
+### Complete Dataset Processing
+
+```bash
+# Process all columns in a dataset
+python run_all.py --dataset-name gdp --all-columns
+
+# Process all datasets with all columns
+python run_all.py --all-datasets --all-columns
+
+# Process limited columns per dataset
+python run_all.py --datasets 3 --columns 2
+```
+
+### Supported Datasets
+
+- **`climate`** - Climate time series data
+- **`emissions-co2`** - CO2 emissions data  
+- **`gdp`** - GDP time series data
+- **`pesticides`** - Pesticide usage data
+- **`fertilizers`** - Fertilizer consumption data
+
+### CSV Format Support
+
+The script automatically detects and handles various CSV separators:
+- **Comma (`,`)** - Standard CSV format
+- **Semicolon (`;`)** - European CSV format
+- **Tab (`\t`)** - TSV format
+- **Pipe (`|`)** - Pipe-separated format
+- **Slash (`/`)** - Custom separator format
+
 ## 📊 Standard Evaluation (Paper Benchmarks)
 
 The standard evaluation computes WQL and MASE metrics for in-domain and zero-shot benchmarks as reported in the paper.
