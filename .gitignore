@@ -19,20 +19,17 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-
 # Virtual Environment
 venv/
 env/
 ENV/
 .venv/
-
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-
 # OS
 .DS_Store
 .DS_Store?
@@ -41,7 +38,6 @@ ENV/
 .Trashes
 ehthumbs.db
 Thumbs.db
-
 # Project specific - EXCLUDE LARGE FILES
 output/
 *.log
@@ -55,18 +51,15 @@ output/
 *.pth
 *.pt
 *.ckpt
-
 # Training outputs (very large) - exclude these specific directories
 results/*/training/run-*/checkpoint-*/
 results/*/training/run-*/logs/
 results/*/training/run-*/model.safetensors
 results/*/training/run-*/pytorch_model.bin
 results/*/training/run-*/checkpoint-final/
-
 # Dataset files (can be large)
 Dataset/Dataset.arrow/
 *.arrow
-
 # Keep essential files (these override exclusions above)
 !*.md
 !*.py
@@ -76,17 +69,14 @@ Dataset/Dataset.arrow/
 !*.txt
 !*.json
 !*.cff
-
 # Jupyter notebooks
 *.ipynb_checkpoints/
 .ipynb_checkpoints/
-
 # Temporary files
 *.tmp
 *.temp
 *.bak
 *.backup
-
 # Large model files
 *.safetensors
 *.bin
@@ -97,13 +87,11 @@ Dataset/Dataset.arrow/
 *.ckpt
 *.model
 *.weights
-
 # Logs and outputs
 logs/
 *.log
 *.out
 *.err
-
 # Results and predictions
 results/*/predictions.csv
 results/*/training_chart.png
