@@ -19,6 +19,9 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+# Rprojet
+*.Rproj.user/
+.Rproj.user/
 # Virtual Environment
 venv/
 env/
