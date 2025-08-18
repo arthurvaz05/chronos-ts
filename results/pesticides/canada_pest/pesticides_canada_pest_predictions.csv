@@ -1,0 +1,54 @@
+timestamp,value,type
+0,29568.0,actual
+1,29477.5,actual
+2,29387.0,actual
+3,29296.5,actual
+4,29206.0,actual
+5,32234.970703125,actual
+6,35263.94140625,actual
+7,38292.91015625,actual
+8,41321.890625,actual
+9,44350.859375,actual
+10,39718.4296875,actual
+11,38501.0,actual
+12,34264.5703125,actual
+13,35628.140625,actual
+14,36163.7109375,actual
+15,36382.2890625,actual
+16,36585.609375,actual
+17,45146.44921875,actual
+18,53707.30078125,actual
+19,54529.3984375,actual
+20,61050.0,actual
+21,62107.19921875,actual
+22,73508.8984375,actual
+23,81659.796875,actual
+24,76314.0,actual
+25,75318.296875,actual
+26,90926.0,actual
+27,98304.0,actual
+28,87632.0,actual
+29,78893.0,actual
+30,92960.0,actual
+31,97692.0,actual
+32,97692.0,actual
+28,92050.0859375,predicted FT SA
+29,92050.0859375,predicted FT SA
+30,92050.0859375,predicted FT SA
+31,90541.0703125,predicted FT SA
+32,88026.03125,predicted FT SA
+28,97080.140625,predicted ZR SA
+29,96074.1328125,predicted ZR SA
+30,97583.1484375,predicted ZR SA
+31,97583.1484375,predicted ZR SA
+32,97080.140625,predicted ZR SA
+28,97583.1484375,predicted FT RO
+29,98086.15625,predicted FT RO
+30,98086.15625,predicted FT RO
+31,98086.15625,predicted FT RO
+32,98086.15625,predicted FT RO
+28,93056.09375,predicted ZR RO
+29,93559.1015625,predicted ZR RO
+30,93056.09375,predicted ZR RO
+31,93559.1015625,predicted ZR RO
+32,92553.09375,predicted ZR RO
