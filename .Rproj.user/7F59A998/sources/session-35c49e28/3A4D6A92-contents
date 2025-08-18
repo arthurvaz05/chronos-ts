@@ -109,3 +109,4 @@ results/*/predictions.csv
 results/*/training_chart.png
 results/*/prediction_analysis.png
 results/*/training_outputs/
+.Rproj.user
